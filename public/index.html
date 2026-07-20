@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Pro</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 🧭 CABEÇALHO / NAVEGAÇÃO -->
+    <header class="topo">
+        <div class="topo-marca">
+            <span class="topo-icone">☀️</span>
+            <span class="topo-titulo">Solar Pro</span>
+        </div>
+        <nav class="topo-nav">
+            <button class="nav-item nav-ativo" data-tela="dashboard">Dashboard</button>
+            <button class="nav-item" data-tela="novo-orcamento">Novo Orçamento</button>
+            <button class="nav-item" data-tela="configuracoes">Configurações</button>
+        </nav>
+    </header>
+
+    <main class="conteudo">
+
+        <!-- 📊 TELA: DASHBOARD -->
+        <section class="tela tela-ativa" id="tela-dashboard">
+
+            <div class="grade-estatisticas">
+                <div class="card-estatistica">
+                    <div class="estatistica-texto">
+                        <span class="estatistica-label">Total de Orçamentos</span>
+                        <span class="estatistica-valor" id="stat-total">0</span>
+                    </div>
+                    <div class="estatistica-icone badge-azul">⚡</div>
+                </div>
+                <div class="card-estatistica">
+                    <div class="estatistica-texto">
+                        <span class="estatistica-label">Valor Total</span>
+                        <span class="estatistica-valor" id="stat-valor">R$ 0,00</span>
+                    </div>
+                    <div class="estatistica-icone badge-verde">💲</div>
+                </div>
+                <div class="card-estatistica">
+                    <div class="estatistica-texto">
+                        <span class="estatistica-label">Propostas Aceitas</span>
+                        <span class="estatistica-valor" id="stat-aceitas">0</span>
+                    </div>
+                    <div class="estatistica-icone badge-laranja">📈</div>
+                </div>
+            </div>
+
+            <div class="card-painel">
+                <div class="painel-topo">
+                    <div>
+                        <h2 class="painel-titulo">Orçamentos</h2>
+                        <p class="painel-subtitulo">Gerencie suas propostas comerciais</p>
+                    </div>
+                    <button class="botao-primario" id="botao-novo-orcamento-topo">+ Novo Orçamento</button>
+                </div>
+
+                <input type="text" class="campo-busca" id="busca-orcamentos" placeholder="Buscar por nome ou cidade...">
+
+                <div class="lista-orcamentos" id="lista-orcamentos">
+                    <div class="estado-vazio" id="estado-vazio-orcamentos">
+                        <div class="estado-vazio-icone">⚡</div>
+                        <p class="estado-vazio-texto">Nenhum orçamento criado ainda</p>
+                        <button class="link-acao" id="botao-criar-primeiro">Criar primeiro orçamento</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 🧮 TELA: NOVO ORÇAMENTO -->
+        <section class="tela" id="tela-novo-orcamento">
+            <div class="card-painel">
+                <h2 class="painel-titulo">Novo Orçamento</h2>
+                <p class="painel-subtitulo">Preencha os dados do cliente e do sistema pra calcular a proposta</p>
+
+                <div class="formulario-grade">
+                    <div class="grupo-campo">
+                        <label>Nome do Cliente</label>
+                        <input type="text" id="campo-cliente-nome" placeholder="Ex: João da Silva">
+                    </div>
+                    <div class="grupo-campo grupo-campo-relativo">
+                        <label>Cidade</label>
+                        <input type="text" id="campo-cidade" placeholder="Digite pra buscar..." autocomplete="off">
+                        <div class="lista-sugestoes" id="sugestoes-cidade"></div>
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Valor do kWh (R$)</label>
+                        <input type="number" id="campo-tarifa" step="0.001" placeholder="Ex: 1.028">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Classificação de Rede</label>
+                        <select id="campo-rede">
+                            <option value="Monofásica">Monofásica</option>
+                            <option value="Bifásica">Bifásica</option>
+                            <option value="Trifásica">Trifásica</option>
+                        </select>
+                    </div>
+                </div>
+
+                <h3 class="subsecao-titulo">Consumo de Energia</h3>
+                <div class="formulario-grade">
+                    <div class="grupo-campo">
+                        <label>Mês de Referência</label>
+                        <select id="campo-mes-referencia"></select>
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Consumo do Mês (kWh)</label>
+                        <input type="number" id="campo-consumo-mes" step="1" placeholder="Ex: 450">
+                    </div>
+                </div>
+                <p class="dica-campo">Informe apenas o mês que vai constar no orçamento — esse valor é usado como consumo médio mensal no dimensionamento.</p>
+
+                <h3 class="subsecao-titulo">Equipamentos</h3>
+                <div class="formulario-grade">
+                    <div class="grupo-campo">
+                        <label>Módulo Fotovoltaico</label>
+                        <select id="campo-modulo"></select>
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Quantidade de Módulos</label>
+                        <input type="number" id="campo-modulo-qtd" min="1" value="10">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Inversor</label>
+                        <select id="campo-inversor"></select>
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Quantidade de Inversores</label>
+                        <input type="number" id="campo-inversor-qtd" min="1" value="1">
+                    </div>
+                </div>
+
+                <h3 class="subsecao-titulo">Financeiro</h3>
+                <div class="formulario-grade">
+                    <div class="grupo-campo">
+                        <label>Valor do Kit (R$)</label>
+                        <input type="number" id="campo-valor-kit" step="0.01">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Custos Extras (R$)</label>
+                        <input type="number" id="campo-custos-extra" step="0.01" value="0">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Margem de Lucro (%)</label>
+                        <input type="number" id="campo-lucro" step="0.1" placeholder="Ex: 35">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Imposto sobre o Lucro (%)</label>
+                        <input type="number" id="campo-imposto" step="0.1" value="0">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Taxa de Financiamento (% ao mês)</label>
+                        <input type="number" id="campo-taxa-financiamento" step="0.001" value="0.9">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Validade da Proposta (dias)</label>
+                        <input type="number" id="campo-validade" value="7">
+                    </div>
+                </div>
+
+                <div class="acoes-formulario">
+                    <button class="botao-secundario" id="botao-calcular">Calcular</button>
+                </div>
+
+                <div class="previa-resultado" id="previa-resultado" style="display:none;">
+                    <h3 class="subsecao-titulo">📋 Relatório de Confirmação</h3>
+                    <p class="painel-subtitulo">Confira se os dados abaixo estão certos antes de gerar o orçamento definitivo.</p>
+
+                    <div class="bloco-relatorio">
+                        <div class="bloco-relatorio-titulo">Cliente e Consumo</div>
+                        <div id="relatorio-cliente"></div>
+                    </div>
+
+                    <div class="bloco-relatorio">
+                        <div class="bloco-relatorio-titulo">Equipamentos</div>
+                        <div id="relatorio-equipamentos"></div>
+                    </div>
+
+                    <div class="bloco-relatorio">
+                        <div class="bloco-relatorio-titulo">Dados Financeiros</div>
+                        <div id="relatorio-financeiro"></div>
+                    </div>
+
+                    <h4 class="subsecao-titulo-menor">Resultado do Dimensionamento</h4>
+                    <div class="grade-resultado" id="grade-resultado"></div>
+                    <table class="tabela-resultado" id="tabela-geracao-mensal"></table>
+                    <table class="tabela-resultado" id="tabela-parcelas"></table>
+
+                    <div class="acoes-formulario">
+                        <button class="botao-secundario" id="botao-editar-orcamento">← Editar Dados</button>
+                        <button class="botao-primario" id="botao-salvar-orcamento">✅ Confirmar e Salvar Orçamento</button>
+                    </div>
+                </div>
+
+                <p id="mensagem-orcamento" class="mensagem-feedback" style="display:none;"></p>
+            </div>
+        </section>
+
+        <!-- ⚙️ TELA: CONFIGURAÇÕES -->
+        <section class="tela" id="tela-configuracoes">
+            <div class="card-painel">
+                <h2 class="painel-titulo">Catálogo de Módulos</h2>
+                <p class="painel-subtitulo">Cadastre os modelos que você mais usa pra reaproveitar nos orçamentos</p>
+
+                <div class="formulario-grade">
+                    <div class="grupo-campo">
+                        <label>Fabricante</label>
+                        <input type="text" id="modulo-fabricante" placeholder="Ex: DMEGC">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Modelo</label>
+                        <input type="text" id="modulo-modelo" placeholder="Ex: DMEGC610WP">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Potência (Wp)</label>
+                        <input type="number" id="modulo-potencia" placeholder="Ex: 610">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Garantia Defeito (anos)</label>
+                        <input type="number" id="modulo-garantia-defeito" value="10">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Garantia Eficiência (anos)</label>
+                        <input type="number" id="modulo-garantia-eficiencia" value="25">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Peso (kg)</label>
+                        <input type="number" id="modulo-peso" step="0.1">
+                    </div>
+                </div>
+                <button class="botao-primario" id="botao-add-modulo">+ Adicionar Módulo</button>
+
+                <div class="lista-catalogo" id="lista-modulos"></div>
+            </div>
+
+            <div class="card-painel">
+                <h2 class="painel-titulo">Catálogo de Inversores</h2>
+                <p class="painel-subtitulo">Mesma ideia, pros inversores</p>
+
+                <div class="formulario-grade">
+                    <div class="grupo-campo">
+                        <label>Fabricante</label>
+                        <input type="text" id="inversor-fabricante" placeholder="Ex: PHB">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Modelo</label>
+                        <input type="text" id="inversor-modelo" placeholder="Ex: PHB 6000">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Potência (kW)</label>
+                        <input type="number" id="inversor-potencia" step="0.1" placeholder="Ex: 6">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Garantia (anos)</label>
+                        <input type="number" id="inversor-garantia" value="10">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Monitoramento</label>
+                        <input type="text" id="inversor-monitoramento" placeholder="Ex: Wireless">
+                    </div>
+                </div>
+                <button class="botao-primario" id="botao-add-inversor">+ Adicionar Inversor</button>
+
+                <div class="lista-catalogo" id="lista-inversores"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 📋 MODAL DE DETALHES DO ORÇAMENTO -->
+    <div class="modal-overlay" id="modal-detalhes">
+        <div class="modal-caixa">
+            <div class="modal-topo">
+                <h3 id="modal-titulo">Orçamento</h3>
+                <button class="botao-fechar-modal" id="botao-fechar-detalhes">✕</button>
+            </div>
+            <div id="modal-corpo"></div>
+            <div class="modal-acoes">
+                <select id="modal-status-select">
+                    <option value="pendente">Pendente</option>
+                    <option value="aceita">Aceita</option>
+                    <option value="recusada">Recusada</option>
+                </select>
+                <button class="botao-secundario" id="modal-botao-pdf">Baixar PDF</button>
+                <button class="botao-perigo" id="modal-botao-excluir">Excluir</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
