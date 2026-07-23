@@ -85,6 +85,7 @@ def _estilos():
         'nota_legal': ParagraphStyle('nota_legal', parent=base['Normal'], fontSize=8, textColor=COR_TEXTO_SECUNDARIO, leading=11.5, spaceAfter=5),
         'campo_assinatura': ParagraphStyle('campo_assinatura', parent=base['Normal'], fontSize=10.5, textColor=COR_TEXTO, leading=26),
         'valor_destaque': ParagraphStyle('valor_destaque', parent=base['Heading1'], fontSize=18, textColor=COR_TEXTO, alignment=TA_CENTER),
+        'celula_tabela': ParagraphStyle('celula_tabela', parent=base['Normal'], fontSize=8.5, textColor=COR_TEXTO, leading=11),
     }
 
 
@@ -191,17 +192,19 @@ def gerar_pdf_proposta(dados_empresa, orcamento, dimensionamento, financeiro, mo
     linhas_equip = [["Equipamento", "Modelo", "Potência", "Qtd.", "Garantia"]]
     if modulo:
         linhas_equip.append([
-            "Módulo Fotovoltaico", f"{modulo['fabricante'] or ''} {modulo['modelo']}".strip(),
+            "Módulo Fotovoltaico",
+            Paragraph(f"{modulo['fabricante'] or ''} {modulo['modelo']}".strip(), e['celula_tabela']),
             f"{modulo['potencia_wp']} Wp", str(orcamento['modulo_quantidade']),
-            f"{modulo['garantia_defeito_anos'] or '-'} anos (defeito) / {modulo['garantia_eficiencia_anos'] or '-'} anos (eficiência)"
+            Paragraph(f"{modulo['garantia_defeito_anos'] or '-'} anos (defeito) / {modulo['garantia_eficiencia_anos'] or '-'} anos (eficiência)", e['celula_tabela'])
         ])
     if inversor:
         linhas_equip.append([
-            "Inversor", f"{inversor['fabricante'] or ''} {inversor['modelo']}".strip(),
+            "Inversor",
+            Paragraph(f"{inversor['fabricante'] or ''} {inversor['modelo']}".strip(), e['celula_tabela']),
             f"{inversor['potencia_kw']} kW", str(orcamento['inversor_quantidade']),
-            f"{inversor['garantia_anos'] or '-'} anos"
+            Paragraph(f"{inversor['garantia_anos'] or '-'} anos", e['celula_tabela'])
         ])
-    tabela_equip = Table(linhas_equip, colWidths=[3.3 * cm, 5 * cm, 2.6 * cm, 1.5 * cm, 3.8 * cm])
+    tabela_equip = Table(linhas_equip, colWidths=[3 * cm, 4.2 * cm, 2.3 * cm, 1.2 * cm, 5.5 * cm])
     tabela_equip.setStyle(TableStyle([
         ('FONTSIZE', (0, 0), (-1, -1), 8.5),
         ('BACKGROUND', (0, 0), (-1, 0), COR_BARRA_ESCURA),
