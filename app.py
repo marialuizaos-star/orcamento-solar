@@ -9,7 +9,7 @@ from psycopg2.extras import RealDictCursor, execute_values
 
 from calculo_solar import (
     encontrar_ponto_mais_proximo, calcular_dimensionamento,
-    calcular_financeiro, calcular_parcelas, MESES, PERDAS_PADRAO_UF_AUSENTE
+    calcular_financeiro, MESES, PERDAS_PADRAO_UF_AUSENTE
 )
 from pdf_proposta import gerar_pdf_proposta
 
@@ -183,12 +183,10 @@ def calcular():
             float(dados["valor_kit"]), float(dados.get("custos_extra", 0)),
             float(dados["lucro_percentual"]), float(dados.get("imposto_percentual", 0))
         )
-        parcelas = calcular_parcelas(financeiro["valor_total"], float(dados.get("taxa_financiamento_mensal", 0.009)))
 
         return jsonify({
             "dimensionamento": dimensionamento,
             "financeiro": financeiro,
-            "parcelas": parcelas,
             "perdas_usada": perdas
         }), 200
     except Exception as e:
@@ -294,7 +292,7 @@ def _linha_para_consumo_dict(linha):
 
 
 def _recalcular_orcamento(cursor, linha):
-    """Reconstrói o dimensionamento/financeiro/parcelas de um orçamento salvo
+    """Reconstrói o dimensionamento/financeiro de um orçamento salvo
     (usado tanto pra exibir detalhes quanto pra gerar o PDF)."""
     cursor.execute("SELECT latitude, longitude, uf FROM cidades WHERE municipio_uf = %s;", (linha['cidade_uf'],))
     cidade = cursor.fetchone()
@@ -329,9 +327,8 @@ def _recalcular_orcamento(cursor, linha):
         float(linha['valor_kit']), float(linha['custos_extra']),
         float(linha['lucro_percentual']), float(linha['imposto_percentual'])
     )
-    parcelas = calcular_parcelas(financeiro['valor_total'], float(linha['taxa_financiamento_mensal']))
 
-    return dimensionamento, financeiro, parcelas, modulo, inversor, perdas
+    return dimensionamento, financeiro, modulo, inversor, perdas
 
 
 @app.route("/api/orcamentos", methods=["GET"])
@@ -443,7 +440,7 @@ def obter_orcamento(id_orcamento):
         conn.close()
         return jsonify({"erro": "Orçamento não encontrado"}), 404
 
-    dimensionamento, financeiro, parcelas, modulo, inversor, perdas = _recalcular_orcamento(cursor, linha)
+    dimensionamento, financeiro, modulo, inversor, perdas = _recalcular_orcamento(cursor, linha)
     cursor.close()
     conn.close()
 
@@ -457,7 +454,6 @@ def obter_orcamento(id_orcamento):
         'orcamento': linha_serializavel,
         'dimensionamento': dimensionamento,
         'financeiro': financeiro,
-        'parcelas': parcelas,
         'modulo': modulo,
         'inversor': inversor
     }), 200
@@ -497,7 +493,7 @@ def gerar_pdf_orcamento(id_orcamento):
         conn.close()
         return jsonify({"erro": "Orçamento não encontrado"}), 404
 
-    dimensionamento, financeiro, parcelas, modulo, inversor, perdas = _recalcular_orcamento(cursor, linha)
+    dimensionamento, financeiro, modulo, inversor, perdas = _recalcular_orcamento(cursor, linha)
     cursor.close()
     conn.close()
 
@@ -505,7 +501,7 @@ def gerar_pdf_orcamento(id_orcamento):
     empresa['responsavel'] = linha.get('responsavel_nome') or empresa['responsavel']
     empresa['contato'] = linha.get('responsavel_contato') or empresa['contato']
 
-    buffer = gerar_pdf_proposta(empresa, linha, dimensionamento, financeiro, parcelas, modulo, inversor, perdas_usada=perdas)
+    buffer = gerar_pdf_proposta(empresa, linha, dimensionamento, financeiro, modulo, inversor, perdas_usada=perdas)
     nome_arquivo = f"proposta_{linha['cliente_nome'].replace(' ', '_')}.pdf"
     return send_file(buffer, as_attachment=True, download_name=nome_arquivo, mimetype='application/pdf')
 

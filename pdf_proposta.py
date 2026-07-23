@@ -22,7 +22,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as ImagemPDF, PageBreak
 )
-from reportlab.lib.enums import TA_RIGHT
+from reportlab.lib.enums import TA_CENTER
 
 DIR_ATUAL = os.path.dirname(os.path.abspath(__file__))
 CAMINHO_LOGO = os.path.join(DIR_ATUAL, 'assets', 'logo_3s_engenharia.jpg')
@@ -84,7 +84,7 @@ def _estilos():
         'corpo_secundario': ParagraphStyle('corpo_secundario', parent=base['Normal'], fontSize=8.5, textColor=COR_TEXTO_SECUNDARIO, leading=12),
         'nota_legal': ParagraphStyle('nota_legal', parent=base['Normal'], fontSize=8, textColor=COR_TEXTO_SECUNDARIO, leading=11.5, spaceAfter=5),
         'campo_assinatura': ParagraphStyle('campo_assinatura', parent=base['Normal'], fontSize=10.5, textColor=COR_TEXTO, leading=26),
-        'valor_destaque': ParagraphStyle('valor_destaque', parent=base['Heading1'], fontSize=18, textColor=COR_TEXTO, alignment=TA_RIGHT),
+        'valor_destaque': ParagraphStyle('valor_destaque', parent=base['Heading1'], fontSize=18, textColor=COR_TEXTO, alignment=TA_CENTER),
     }
 
 
@@ -115,7 +115,7 @@ def _caixa_destaque(texto, estilos):
     return tabela
 
 
-def gerar_pdf_proposta(dados_empresa, orcamento, dimensionamento, financeiro, parcelas, modulo, inversor, perdas_usada=None):
+def gerar_pdf_proposta(dados_empresa, orcamento, dimensionamento, financeiro, modulo, inversor, perdas_usada=None):
     """
     dados_empresa: {'nome', 'cnpj', 'responsavel', 'contato'}
     orcamento: dict com os campos salvos da tabela `orcamentos`
@@ -262,22 +262,6 @@ def gerar_pdf_proposta(dados_empresa, orcamento, dimensionamento, financeiro, pa
 
     story.append(_caixa_destaque(f"Valor Total do Sistema&nbsp;&nbsp;=&nbsp;&nbsp;{fmt_moeda(financeiro['valor_total'])}", e))
     story.append(Spacer(1, 10))
-
-    linhas_parcelas = [["Prazo", "Valor da Parcela"]]
-    for prazo, valor in parcelas.items():
-        linhas_parcelas.append([f"{prazo}x", fmt_moeda(valor)])
-    tabela_parcelas = Table(linhas_parcelas, colWidths=[8 * cm, 8.2 * cm])
-    tabela_parcelas.setStyle(TableStyle([
-        ('FONTSIZE', (0, 0), (-1, -1), 9.5),
-        ('BACKGROUND', (0, 0), (-1, 0), COR_BARRA_ESCURA),
-        ('TEXTCOLOR', (0, 0), (-1, 0), COR_BRANCO),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('GRID', (0, 0), (-1, -1), 0.4, COR_BORDA),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-    ]))
-    story.append(tabela_parcelas)
 
     # --- 7. Página final: informações importantes + aceite da proposta ---
     story.append(PageBreak())

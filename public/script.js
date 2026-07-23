@@ -16,6 +16,7 @@ let catalogoModulos = [];
 let catalogoInversores = [];
 let ultimoCalculo = null;   // guarda o resultado do /api/calcular antes de salvar
 let idOrcamentoSelecionado = null;
+let orcamentoEditandoId = null;
 
 function formatarMoeda(valor) {
     return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -37,8 +38,8 @@ function irParaTela(nomeTela) {
     if (nomeTela === 'configuracoes') carregarCatalogos();
 }
 
-document.getElementById('botao-novo-orcamento-topo').addEventListener('click', () => irParaTela('novo-orcamento'));
-document.getElementById('botao-criar-primeiro').addEventListener('click', () => irParaTela('novo-orcamento'));
+document.getElementById('botao-novo-orcamento-topo').addEventListener('click', () => { limparFormularioOrcamento(); irParaTela('novo-orcamento'); });
+document.getElementById('botao-criar-primeiro').addEventListener('click', () => { limparFormularioOrcamento(); irParaTela('novo-orcamento'); });
 
 // ==========================================================================
 // 3. DASHBOARD
@@ -70,7 +71,7 @@ function renderizarListaOrcamentos(orcamentos) {
                 <p class="estado-vazio-texto">Nenhum orçamento encontrado</p>
                 <button class="link-acao" id="botao-criar-primeiro">Criar primeiro orçamento</button>
             </div>`;
-        document.getElementById('botao-criar-primeiro').addEventListener('click', () => irParaTela('novo-orcamento'));
+        document.getElementById('botao-criar-primeiro').addEventListener('click', () => { limparFormularioOrcamento(); irParaTela('novo-orcamento'); });
         return;
     }
 
@@ -141,6 +142,38 @@ document.getElementById('modal-status-select').addEventListener('change', async 
 
 document.getElementById('modal-botao-pdf').addEventListener('click', () => {
     window.open(`/api/orcamentos/${idOrcamentoSelecionado}/pdf`, '_blank');
+});
+
+document.getElementById('modal-botao-editar').addEventListener('click', async () => {
+    const resposta = await fetch(`/api/orcamentos/${idOrcamentoSelecionado}`);
+    if (!resposta.ok) return;
+    const dados = await resposta.json();
+    const o = dados.orcamento;
+
+    orcamentoEditandoId = o.id;
+
+    await carregarCatalogosNoFormulario(); // garante que os <select> de módulo/inversor já têm opções
+
+    document.getElementById('campo-cliente-nome').value = o.cliente_nome;
+    campoCidade.value = o.cidade_uf;
+    document.getElementById('campo-tarifa').value = o.tarifa_kwh;
+    document.getElementById('campo-rede').value = o.classificacao_rede || 'Monofásica';
+    document.getElementById('campo-consumo-mes').value = o.consumo_jan; // os 12 meses guardam o mesmo valor
+    document.getElementById('campo-modulo').value = o.modulo_id || '';
+    document.getElementById('campo-modulo-qtd').value = o.modulo_quantidade;
+    document.getElementById('campo-inversor').value = o.inversor_id || '';
+    document.getElementById('campo-inversor-qtd').value = o.inversor_quantidade;
+    document.getElementById('campo-valor-kit').value = o.valor_kit;
+    document.getElementById('campo-custos-extra').value = o.custos_extra;
+    document.getElementById('campo-lucro').value = (parseFloat(o.lucro_percentual) * 100).toFixed(2);
+    document.getElementById('campo-imposto').value = (parseFloat(o.imposto_percentual) * 100).toFixed(2);
+    document.getElementById('campo-validade').value = o.validade_dias;
+
+    document.getElementById('previa-resultado').style.display = 'none';
+    document.getElementById('mensagem-orcamento').style.display = 'none';
+
+    modalDetalhes.classList.remove('mostrar');
+    irParaTela('novo-orcamento');
 });
 
 document.getElementById('modal-botao-excluir').addEventListener('click', async () => {
@@ -242,7 +275,6 @@ function coletarDadosDoFormulario() {
         custos_extra: parseFloat(document.getElementById('campo-custos-extra').value) || 0,
         lucro_percentual: (parseFloat(document.getElementById('campo-lucro').value) || 0) / 100,
         imposto_percentual: (parseFloat(document.getElementById('campo-imposto').value) || 0) / 100,
-        taxa_financiamento_mensal: (parseFloat(document.getElementById('campo-taxa-financiamento').value) || 0) / 100,
         validade_dias: parseInt(document.getElementById('campo-validade').value) || 7
     };
 }
@@ -285,7 +317,7 @@ document.getElementById('botao-calcular').addEventListener('click', async () => 
 });
 
 function exibirPreviaResultado(dados, resultado) {
-    const { dimensionamento, financeiro, parcelas } = resultado;
+    const { dimensionamento, financeiro } = resultado;
 
     const modulo = catalogoModulos.find(m => m.id == dados.modulo_id);
     const inversor = catalogoInversores.find(i => i.id == dados.inversor_id);
@@ -314,7 +346,6 @@ function exibirPreviaResultado(dados, resultado) {
         <div class="linha-relatorio"><span>Custos Extras</span><span>${formatarMoeda(dados.custos_extra)}</span></div>
         <div class="linha-relatorio"><span>Margem de Lucro</span><span>${(dados.lucro_percentual * 100).toFixed(1)}%</span></div>
         <div class="linha-relatorio"><span>Imposto sobre o Lucro</span><span>${(dados.imposto_percentual * 100).toFixed(1)}%</span></div>
-        <div class="linha-relatorio"><span>Taxa de Financiamento</span><span>${(dados.taxa_financiamento_mensal * 100).toFixed(3)}% a.m.</span></div>
         <div class="linha-relatorio"><span>Validade da Proposta</span><span>${dados.validade_dias} dias</span></div>
     `;
 
@@ -331,12 +362,6 @@ function exibirPreviaResultado(dados, resultado) {
         ${MESES.map(m => `<tr><td>${MESES_LABEL_COMPLETO[m.chave]}</td><td>${dimensionamento.geracao_mensal_kwh[m.chave]}</td></tr>`).join('')}
     `;
 
-    const tabelaParcelas = document.getElementById('tabela-parcelas');
-    tabelaParcelas.innerHTML = `
-        <tr><th>Prazo</th><th>Parcela</th></tr>
-        ${Object.entries(parcelas).map(([prazo, valor]) => `<tr><td>${prazo}x</td><td>${formatarMoeda(valor)}</td></tr>`).join('')}
-    `;
-
     document.getElementById('previa-resultado').style.display = 'block';
 }
 
@@ -351,17 +376,20 @@ document.getElementById('botao-editar-orcamento').addEventListener('click', () =
 document.getElementById('botao-salvar-orcamento').addEventListener('click', async () => {
     if (!ultimoCalculo) return;
     const mensagem = document.getElementById('mensagem-orcamento');
+    const editando = orcamentoEditandoId !== null;
 
     try {
-        const resposta = await fetch('/api/orcamentos', {
-            method: 'POST',
+        const resposta = await fetch(editando ? `/api/orcamentos/${orcamentoEditandoId}` : '/api/orcamentos', {
+            method: editando ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(ultimoCalculo.dadosFormulario)
         });
         const resultado = await resposta.json();
         if (!resposta.ok) throw new Error(resultado.erro || 'Falha ao salvar');
 
-        mensagem.textContent = '✅ Orçamento salvo! Você já pode baixar o PDF pelo Dashboard.';
+        mensagem.textContent = editando
+            ? '✅ Orçamento atualizado com sucesso!'
+            : '✅ Orçamento salvo! Você já pode baixar o PDF pelo Dashboard.';
         mensagem.className = 'mensagem-feedback sucesso';
         mensagem.style.display = 'block';
 
@@ -389,6 +417,7 @@ function limparFormularioOrcamento() {
     document.getElementById('previa-resultado').style.display = 'none';
     document.getElementById('mensagem-orcamento').style.display = 'none';
     ultimoCalculo = null;
+    orcamentoEditandoId = null;
 }
 
 // ==========================================================================

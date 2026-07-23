@@ -153,10 +153,6 @@
                         <input type="number" id="campo-imposto" step="0.1" value="0">
                     </div>
                     <div class="grupo-campo">
-                        <label>Taxa de Financiamento (% ao mês)</label>
-                        <input type="number" id="campo-taxa-financiamento" step="0.001" value="0.9">
-                    </div>
-                    <div class="grupo-campo">
                         <label>Validade da Proposta (dias)</label>
                         <input type="number" id="campo-validade" value="7">
                     </div>
@@ -188,7 +184,6 @@
                     <h4 class="subsecao-titulo-menor">Resultado do Dimensionamento</h4>
                     <div class="grade-resultado" id="grade-resultado"></div>
                     <table class="tabela-resultado" id="tabela-geracao-mensal"></table>
-                    <table class="tabela-resultado" id="tabela-parcelas"></table>
 
                     <div class="acoes-formulario">
                         <button class="botao-secundario" id="botao-editar-orcamento">← Editar Dados</button>
@@ -286,6 +281,7 @@
                     <option value="recusada">Recusada</option>
                 </select>
                 <button class="botao-secundario" id="modal-botao-pdf">Baixar PDF</button>
+                <button class="botao-secundario" id="modal-botao-editar">✏️ Editar</button>
                 <button class="botao-perigo" id="modal-botao-excluir">Excluir</button>
             </div>
         </div>
