@@ -1,6 +1,7 @@
 import os
 import csv
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from flask import Flask, jsonify, request, send_from_directory, send_file
 from flask_cors import CORS
 import psycopg2
@@ -34,6 +35,8 @@ DB_CONFIG = {
 
 DIR_SEED = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'seed_data')
 
+FUSO_ACRE = ZoneInfo("America/Rio_Branco")  # UTC-5, sem horário de verão
+
 
 def obter_conexao():
     if DATABASE_URL:
@@ -41,6 +44,11 @@ def obter_conexao():
     else:
         conn = psycopg2.connect(**DB_CONFIG)
     conn.set_client_encoding('UTF8')
+    # Faz NOW() (usado no DEFAULT de data_criacao dos orçamentos) refletir
+    # o horário do Acre, não o do servidor
+    cursor_fuso = conn.cursor()
+    cursor_fuso.execute("SET TIME ZONE 'America/Rio_Branco';")
+    cursor_fuso.close()
     return conn
 
 
