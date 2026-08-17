@@ -662,3 +662,16 @@ body {
     }
     .botao-primario { width: 100%; }
 }
+.botao-voltar {
+    background: none;
+    border: none;
+    color: var(--cor-texto-secundario);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 16px;
+    display: inline-block;
+}
+
+.botao-voltar:hover { color: var(--cor-primaria); }

@@ -75,6 +75,7 @@
         <!-- 🧮 TELA: NOVO ORÇAMENTO -->
         <section class="tela" id="tela-novo-orcamento">
             <div class="card-painel">
+                <button class="botao-voltar" id="botao-voltar-novo-orcamento">← Voltar</button>
                 <h2 class="painel-titulo">Novo Orçamento</h2>
                 <p class="painel-subtitulo">Preencha os dados do cliente e do sistema pra calcular a proposta</p>
 
@@ -139,11 +140,11 @@
                 <div class="formulario-grade">
                     <div class="grupo-campo">
                         <label>Valor do Kit (R$)</label>
-                        <input type="number" id="campo-valor-kit" step="0.01">
+                        <input type="text" id="campo-valor-kit" class="campo-mascara-moeda" placeholder="R$ 0,00">
                     </div>
                     <div class="grupo-campo">
                         <label>Custos Extras (R$)</label>
-                        <input type="number" id="campo-custos-extra" step="0.01" value="0">
+                        <input type="text" id="campo-custos-extra" class="campo-mascara-moeda" value="R$ 0,00">
                     </div>
                     <div class="grupo-campo">
                         <label>Margem de Lucro (%)</label>

@@ -1,4 +1,28 @@
 // ==========================================================================
+// 💰 MÁSCARA DE VALOR EM REAIS — formata "R$ 1.234,56" enquanto digita
+// ==========================================================================
+function aplicarMascaraMoeda(valorBruto) {
+    const digitos = valorBruto.replace(/\D/g, ''); // só números, trata como centavos
+    if (!digitos) return '';
+    const numero = parseInt(digitos, 10) / 100;
+    return numero.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+// Converte "R$ 1.234,56" de volta pra número (1234.56), pra cálculo/envio
+function valorMascaradoParaNumero(valorMascarado) {
+    const digitos = (valorMascarado || '').replace(/\D/g, '');
+    return digitos ? parseInt(digitos, 10) / 100 : 0;
+}
+
+function configurarMascarasDeMoeda() {
+    document.querySelectorAll('.campo-mascara-moeda').forEach(campo => {
+        campo.addEventListener('input', () => {
+            campo.value = aplicarMascaraMoeda(campo.value);
+        });
+    });
+}
+
+// ==========================================================================
 // 1. Constantes e estado global
 // ==========================================================================
 const MESES = [
@@ -37,6 +61,11 @@ function irParaTela(nomeTela) {
     if (nomeTela === 'dashboard') carregarDashboard();
     if (nomeTela === 'configuracoes') carregarCatalogos();
 }
+
+document.getElementById('botao-voltar-novo-orcamento').addEventListener('click', () => {
+    limparFormularioOrcamento();
+    irParaTela('dashboard');
+});
 
 document.getElementById('botao-novo-orcamento-topo').addEventListener('click', () => { limparFormularioOrcamento(); irParaTela('novo-orcamento'); });
 document.getElementById('botao-criar-primeiro').addEventListener('click', () => { limparFormularioOrcamento(); irParaTela('novo-orcamento'); });
@@ -163,8 +192,8 @@ document.getElementById('modal-botao-editar').addEventListener('click', async ()
     document.getElementById('campo-modulo-qtd').value = o.modulo_quantidade;
     document.getElementById('campo-inversor').value = o.inversor_id || '';
     document.getElementById('campo-inversor-qtd').value = o.inversor_quantidade;
-    document.getElementById('campo-valor-kit').value = o.valor_kit;
-    document.getElementById('campo-custos-extra').value = o.custos_extra;
+    document.getElementById('campo-valor-kit').value = aplicarMascaraMoeda(String(Math.round(o.valor_kit * 100)));
+    document.getElementById('campo-custos-extra').value = aplicarMascaraMoeda(String(Math.round(o.custos_extra * 100)));
     document.getElementById('campo-lucro').value = (parseFloat(o.lucro_percentual) * 100).toFixed(2);
     document.getElementById('campo-imposto').value = (parseFloat(o.imposto_percentual) * 100).toFixed(2);
     document.getElementById('campo-validade').value = o.validade_dias;
@@ -271,8 +300,8 @@ function coletarDadosDoFormulario() {
         inversor_id: document.getElementById('campo-inversor').value || null,
         inversor_quantidade: parseInt(document.getElementById('campo-inversor-qtd').value) || 1,
         potencia_sistema_kwp: potenciaSistemaKwp,
-        valor_kit: parseFloat(document.getElementById('campo-valor-kit').value) || 0,
-        custos_extra: parseFloat(document.getElementById('campo-custos-extra').value) || 0,
+        valor_kit: valorMascaradoParaNumero(document.getElementById('campo-valor-kit').value),
+        custos_extra: valorMascaradoParaNumero(document.getElementById('campo-custos-extra').value),
         lucro_percentual: (parseFloat(document.getElementById('campo-lucro').value) || 0) / 100,
         imposto_percentual: (parseFloat(document.getElementById('campo-imposto').value) || 0) / 100,
         validade_dias: parseInt(document.getElementById('campo-validade').value) || 7
@@ -411,7 +440,7 @@ function limparFormularioOrcamento() {
     campoMesReferencia.selectedIndex = 0;
     document.getElementById('campo-consumo-mes').value = '';
     document.getElementById('campo-valor-kit').value = '';
-    document.getElementById('campo-custos-extra').value = '0';
+    document.getElementById('campo-custos-extra').value = 'R$ 0,00';
     document.getElementById('campo-lucro').value = '';
     document.getElementById('campo-imposto').value = '0';
     document.getElementById('previa-resultado').style.display = 'none';
@@ -513,3 +542,4 @@ document.getElementById('botao-add-inversor').addEventListener('click', async ()
 // ==========================================================================
 carregarDashboard();
 carregarCatalogosNoFormulario();
+configurarMascarasDeMoeda();
