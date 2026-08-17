@@ -64,6 +64,26 @@ function formatarMoeda(valor) {
     return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+// Função auxiliar para lidar com respostas da API de forma segura
+async function tratarRespostaApi(resposta) {
+    const contentType = resposta.headers.get('content-type');
+    let dados = null;
+
+    if (contentType && contentType.includes('application/json')) {
+        dados = await resposta.json();
+    } else {
+        const textoHtml = await resposta.text();
+        console.error('Resposta não-JSON recebida do backend:', textoHtml);
+        throw new Error(`Erro no backend (${resposta.status} ${resposta.statusText}). Verifique os logs do servidor.`);
+    }
+
+    if (!resposta.ok) {
+        throw new Error(dados?.erro || dados?.message || `Falha na requisição (Status: ${resposta.status})`);
+    }
+
+    return dados;
+}
+
 // ==========================================================================
 // 2. Navegação entre telas
 // ==========================================================================
@@ -94,13 +114,13 @@ document.getElementById('botao-criar-primeiro').addEventListener('click', () => 
 async function carregarDashboard() {
     try {
         const [estatisticas, orcamentos] = await Promise.all([
-            fetch('/api/orcamentos/estatisticas').then(r => r.json()),
-            fetch('/api/orcamentos').then(r => r.json())
+            fetch('/api/orcamentos/estatisticas').then(tratarRespostaApi),
+            fetch('/api/orcamentos').then(tratarRespostaApi)
         ]);
 
-        document.getElementById('stat-total').textContent = estatisticas.total_orcamentos;
-        document.getElementById('stat-valor').textContent = formatarMoeda(estatisticas.valor_total);
-        document.getElementById('stat-aceitas').textContent = estatisticas.propostas_aceitas;
+        document.getElementById('stat-total').textContent = estatisticas.total_orcamentos || 0;
+        document.getElementById('stat-valor').textContent = formatarMoeda(estatisticas.valor_total || 0);
+        document.getElementById('stat-aceitas').textContent = estatisticas.propostas_aceitas || 0;
 
         renderizarListaOrcamentos(orcamentos);
     } catch (erro) {
@@ -111,7 +131,7 @@ async function carregarDashboard() {
 function renderizarListaOrcamentos(orcamentos) {
     const container = document.getElementById('lista-orcamentos');
 
-    if (orcamentos.length === 0) {
+    if (!orcamentos || orcamentos.length === 0) {
         container.innerHTML = `
             <div class="estado-vazio" id="estado-vazio-orcamentos">
                 <div class="estado-vazio-icone">⚡</div>
@@ -145,8 +165,13 @@ document.getElementById('busca-orcamentos').addEventListener('input', (e) => {
     clearTimeout(temporizadorBusca);
     const termo = e.target.value;
     temporizadorBusca = setTimeout(async () => {
-        const resposta = await fetch(`/api/orcamentos?q=${encodeURIComponent(termo)}`);
-        renderizarListaOrcamentos(await resposta.json());
+        try {
+            const resposta = await fetch(`/api/orcamentos?q=${encodeURIComponent(termo)}`);
+            const dados = await tratarRespostaApi(resposta);
+            renderizarListaOrcamentos(dados);
+        } catch (erro) {
+            console.error('Erro na busca:', erro);
+        }
     }, 300);
 });
 
@@ -156,35 +181,43 @@ document.getElementById('busca-orcamentos').addEventListener('input', (e) => {
 const modalDetalhes = document.getElementById('modal-detalhes');
 
 async function abrirDetalhesOrcamento(id) {
-    idOrcamentoSelecionado = id;
-    const resposta = await fetch(`/api/orcamentos/${id}`);
-    if (!resposta.ok) return;
-    const dados = await resposta.json();
+    try {
+        idOrcamentoSelecionado = id;
+        const resposta = await fetch(`/api/orcamentos/${id}`);
+        const dados = await tratarRespostaApi(resposta);
 
-    document.getElementById('modal-titulo').textContent = dados.orcamento.cliente_nome;
-    document.getElementById('modal-status-select').value = dados.orcamento.status;
+        document.getElementById('modal-titulo').textContent = dados.orcamento.cliente_nome;
+        document.getElementById('modal-status-select').value = dados.orcamento.status;
 
-    document.getElementById('modal-corpo').innerHTML = `
-        <div class="modal-linha"><span>Cidade</span><span>${dados.orcamento.cidade_uf}</span></div>
-        <div class="modal-linha"><span>Potência do Sistema</span><span>${dados.dimensionamento.potencia_escolhida_kwp} kWp</span></div>
-        <div class="modal-linha"><span>Geração Média Mensal</span><span>${dados.dimensionamento.geracao_media_mensal_kwh} kWh</span></div>
-        <div class="modal-linha"><span>Valor Total</span><span>${formatarMoeda(dados.financeiro.valor_total)}</span></div>
-        <div class="modal-linha"><span>Data de Criação</span><span>${new Date(dados.orcamento.data_criacao).toLocaleDateString('pt-BR')}</span></div>
-    `;
+        document.getElementById('modal-corpo').innerHTML = `
+            <div class="modal-linha"><span>Cidade</span><span>${dados.orcamento.cidade_uf}</span></div>
+            <div class="modal-linha"><span>Potência do Sistema</span><span>${dados.dimensionamento.potencia_escolhida_kwp} kWp</span></div>
+            <div class="modal-linha"><span>Geração Média Mensal</span><span>${dados.dimensionamento.geracao_media_mensal_kwh} kWh</span></div>
+            <div class="modal-linha"><span>Valor Total</span><span>${formatarMoeda(dados.financeiro.valor_total)}</span></div>
+            <div class="modal-linha"><span>Data de Criação</span><span>${new Date(dados.orcamento.data_criacao).toLocaleDateString('pt-BR')}</span></div>
+        `;
 
-    modalDetalhes.classList.add('mostrar');
+        modalDetalhes.classList.add('mostrar');
+    } catch (erro) {
+        alert(`❌ Não foi possível carregar o orçamento: ${erro.message}`);
+    }
 }
 
 document.getElementById('botao-fechar-detalhes').addEventListener('click', () => modalDetalhes.classList.remove('mostrar'));
 modalDetalhes.addEventListener('click', (e) => { if (e.target === modalDetalhes) modalDetalhes.classList.remove('mostrar'); });
 
 document.getElementById('modal-status-select').addEventListener('change', async (e) => {
-    await fetch(`/api/orcamentos/${idOrcamentoSelecionado}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: e.target.value })
-    });
-    carregarDashboard();
+    try {
+        const resposta = await fetch(`/api/orcamentos/${idOrcamentoSelecionado}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: e.target.value })
+        });
+        await tratarRespostaApi(resposta);
+        carregarDashboard();
+    } catch (erro) {
+        alert(`❌ Erro ao atualizar status: ${erro.message}`);
+    }
 });
 
 document.getElementById('modal-botao-pdf').addEventListener('click', () => {
@@ -192,42 +225,50 @@ document.getElementById('modal-botao-pdf').addEventListener('click', () => {
 });
 
 document.getElementById('modal-botao-editar').addEventListener('click', async () => {
-    const resposta = await fetch(`/api/orcamentos/${idOrcamentoSelecionado}`);
-    if (!resposta.ok) return;
-    const dados = await resposta.json();
-    const o = dados.orcamento;
+    try {
+        const resposta = await fetch(`/api/orcamentos/${idOrcamentoSelecionado}`);
+        const dados = await tratarRespostaApi(resposta);
+        const o = dados.orcamento;
 
-    orcamentoEditandoId = o.id;
+        orcamentoEditandoId = o.id;
 
-    await carregarCatalogosNoFormulario(); // garante que os <select> de módulo/inversor já têm opções
+        await carregarCatalogosNoFormulario();
 
-    document.getElementById('campo-cliente-nome').value = o.cliente_nome;
-    campoCidade.value = o.cidade_uf;
-    document.getElementById('campo-tarifa').value = aplicarMascaraTarifa(String(Math.round(o.tarifa_kwh * 1000)));
-    document.getElementById('campo-rede').value = o.classificacao_rede || 'Monofásica';
-    document.getElementById('campo-consumo-mes').value = o.consumo_jan; // os 12 meses guardam o mesmo valor
-    document.getElementById('campo-modulo').value = o.modulo_id || '';
-    document.getElementById('campo-modulo-qtd').value = o.modulo_quantidade;
-    document.getElementById('campo-inversor').value = o.inversor_id || '';
-    document.getElementById('campo-inversor-qtd').value = o.inversor_quantidade;
-    document.getElementById('campo-valor-kit').value = aplicarMascaraMoeda(String(Math.round(o.valor_kit * 100)));
-    document.getElementById('campo-custos-extra').value = aplicarMascaraMoeda(String(Math.round(o.custos_extra * 100)));
-    document.getElementById('campo-lucro').value = (parseFloat(o.lucro_percentual) * 100).toFixed(2);
-    document.getElementById('campo-imposto').value = (parseFloat(o.imposto_percentual) * 100).toFixed(2);
-    document.getElementById('campo-validade').value = o.validade_dias;
+        document.getElementById('campo-cliente-nome').value = o.cliente_nome;
+        campoCidade.value = o.cidade_uf;
+        document.getElementById('campo-tarifa').value = aplicarMascaraTarifa(String(Math.round(o.tarifa_kwh * 1000)));
+        document.getElementById('campo-rede').value = o.classificacao_rede || 'Monofásica';
+        document.getElementById('campo-consumo-mes').value = o.consumo_jan;
+        document.getElementById('campo-modulo').value = o.modulo_id || '';
+        document.getElementById('campo-modulo-qtd').value = o.modulo_quantidade;
+        document.getElementById('campo-inversor').value = o.inversor_id || '';
+        document.getElementById('campo-inversor-qtd').value = o.inversor_quantidade;
+        document.getElementById('campo-valor-kit').value = aplicarMascaraMoeda(String(Math.round(o.valor_kit * 100)));
+        document.getElementById('campo-custos-extra').value = aplicarMascaraMoeda(String(Math.round(o.custos_extra * 100)));
+        document.getElementById('campo-lucro').value = (parseFloat(o.lucro_percentual) * 100).toFixed(2);
+        document.getElementById('campo-imposto').value = (parseFloat(o.imposto_percentual) * 100).toFixed(2);
+        document.getElementById('campo-validade').value = o.validade_dias;
 
-    document.getElementById('previa-resultado').style.display = 'none';
-    document.getElementById('mensagem-orcamento').style.display = 'none';
+        document.getElementById('previa-resultado').style.display = 'none';
+        document.getElementById('mensagem-orcamento').style.display = 'none';
 
-    modalDetalhes.classList.remove('mostrar');
-    irParaTela('novo-orcamento');
+        modalDetalhes.classList.remove('mostrar');
+        irParaTela('novo-orcamento');
+    } catch (erro) {
+        alert(`❌ Não foi possível carregar os dados para edição: ${erro.message}`);
+    }
 });
 
 document.getElementById('modal-botao-excluir').addEventListener('click', async () => {
     if (!confirm('Excluir esse orçamento? Essa ação não pode ser desfeita.')) return;
-    await fetch(`/api/orcamentos/${idOrcamentoSelecionado}`, { method: 'DELETE' });
-    modalDetalhes.classList.remove('mostrar');
-    carregarDashboard();
+    try {
+        const resposta = await fetch(`/api/orcamentos/${idOrcamentoSelecionado}`, { method: 'DELETE' });
+        await tratarRespostaApi(resposta);
+        modalDetalhes.classList.remove('mostrar');
+        carregarDashboard();
+    } catch (erro) {
+        alert(`❌ Erro ao excluir: ${erro.message}`);
+    }
 });
 
 // ==========================================================================
@@ -247,19 +288,23 @@ campoCidade.addEventListener('input', () => {
     if (termo.length < 3) { listaSugestoes.classList.remove('mostrar'); return; }
 
     temporizadorCidade = setTimeout(async () => {
-        const resposta = await fetch(`/api/cidades?q=${encodeURIComponent(termo)}`);
-        const cidades = await resposta.json();
-        if (cidades.length === 0) { listaSugestoes.classList.remove('mostrar'); return; }
+        try {
+            const resposta = await fetch(`/api/cidades?q=${encodeURIComponent(termo)}`);
+            const cidades = await tratarRespostaApi(resposta);
+            if (cidades.length === 0) { listaSugestoes.classList.remove('mostrar'); return; }
 
-        listaSugestoes.innerHTML = cidades.map(c => `<div class="item-sugestao" data-valor="${c.municipio_uf}">${c.municipio_uf}</div>`).join('');
-        listaSugestoes.classList.add('mostrar');
+            listaSugestoes.innerHTML = cidades.map(c => `<div class="item-sugestao" data-valor="${c.municipio_uf}">${c.municipio_uf}</div>`).join('');
+            listaSugestoes.classList.add('mostrar');
 
-        listaSugestoes.querySelectorAll('.item-sugestao').forEach(item => {
-            item.addEventListener('click', () => {
-                campoCidade.value = item.dataset.valor;
-                listaSugestoes.classList.remove('mostrar');
+            listaSugestoes.querySelectorAll('.item-sugestao').forEach(item => {
+                item.addEventListener('click', () => {
+                    campoCidade.value = item.dataset.valor;
+                    listaSugestoes.classList.remove('mostrar');
+                });
             });
-        });
+        } catch (erro) {
+            console.error('Erro ao buscar cidades:', erro);
+        }
     }, 250);
 });
 
@@ -269,33 +314,33 @@ document.addEventListener('click', (e) => {
 
 // Carrega os selects de módulo/inversor a partir do catálogo
 async function carregarCatalogosNoFormulario() {
-    const [modulos, inversores] = await Promise.all([
-        fetch('/api/modulos').then(r => r.json()),
-        fetch('/api/inversores').then(r => r.json())
-    ]);
-    catalogoModulos = modulos;
-    catalogoInversores = inversores;
+    try {
+        const [modulos, inversores] = await Promise.all([
+            fetch('/api/modulos').then(tratarRespostaApi),
+            fetch('/api/inversores').then(tratarRespostaApi)
+        ]);
+        catalogoModulos = modulos;
+        catalogoInversores = inversores;
 
-    const selectModulo = document.getElementById('campo-modulo');
-    const selectInversor = document.getElementById('campo-inversor');
+        const selectModulo = document.getElementById('campo-modulo');
+        const selectInversor = document.getElementById('campo-inversor');
 
-    selectModulo.innerHTML = modulos.length
-        ? modulos.map(m => `<option value="${m.id}">${m.fabricante || ''} ${m.modelo} (${m.potencia_wp}Wp)</option>`).join('')
-        : '<option value="">Nenhum módulo cadastrado — vá em Configurações</option>';
+        selectModulo.innerHTML = modulos.length
+            ? modulos.map(m => `<option value="${m.id}">${m.fabricante || ''} ${m.modelo} (${m.potencia_wp}Wp)</option>`).join('')
+            : '<option value="">Nenhum módulo cadastrado — vá em Configurações</option>';
 
-    selectInversor.innerHTML = inversores.length
-        ? inversores.map(i => `<option value="${i.id}">${i.fabricante || ''} ${i.modelo} (${i.potencia_kw}kW)</option>`).join('')
-        : '<option value="">Nenhum inversor cadastrado — vá em Configurações</option>';
+        selectInversor.innerHTML = inversores.length
+            ? inversores.map(i => `<option value="${i.id}">${i.fabricante || ''} ${i.modelo} (${i.potencia_kw}kW)</option>`).join('')
+            : '<option value="">Nenhum inversor cadastrado — vá em Configurações</option>';
+    } catch (erro) {
+        console.error('Erro ao carregar catálogos:', erro);
+    }
 }
 
 // ==========================================================================
 // 6. CALCULAR (preview, sem salvar)
 // ==========================================================================
 function coletarDadosDoFormulario() {
-    // Só pedimos o consumo de UM mês (o que vai constar no orçamento). Como o motor de
-    // cálculo (calculo_solar.py) e o banco ainda trabalham com os 12 meses, replicamos
-    // esse mesmo valor pros 12 meses — na prática vira o "consumo médio mensal" usado
-    // no dimensionamento e no PDF.
     const mesReferencia = campoMesReferencia.value;
     const consumoMes = parseFloat(document.getElementById('campo-consumo-mes').value) || 0;
     const consumo = {};
@@ -350,8 +395,7 @@ document.getElementById('botao-calcular').addEventListener('click', async () => 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados)
         });
-        const resultado = await resposta.json();
-        if (!resposta.ok) throw new Error(resultado.erro || 'Falha ao calcular');
+        const resultado = await tratarRespostaApi(resposta);
 
         ultimoCalculo = { dadosFormulario: dados, resultado };
         exibirPreviaResultado(dados, resultado);
@@ -371,7 +415,6 @@ function exibirPreviaResultado(dados, resultado) {
     const nomeModulo = modulo ? `${modulo.fabricante || ''} ${modulo.modelo} (${modulo.potencia_wp}Wp)`.trim() : '—';
     const nomeInversor = inversor ? `${inversor.fabricante || ''} ${inversor.modelo} (${inversor.potencia_kw}kW)`.trim() : '—';
 
-    // --- Bloco: Cliente e Consumo ---
     document.getElementById('relatorio-cliente').innerHTML = `
         <div class="linha-relatorio"><span>Cliente</span><span>${dados.cliente_nome}</span></div>
         <div class="linha-relatorio"><span>Cidade</span><span>${dados.cidade_uf}</span></div>
@@ -380,14 +423,12 @@ function exibirPreviaResultado(dados, resultado) {
         <div class="linha-relatorio"><span>Consumo Informado (${MESES_LABEL_COMPLETO[dados.mes_referencia]})</span><span>${dados.consumo_mes} kWh</span></div>
     `;
 
-    // --- Bloco: Equipamentos ---
     document.getElementById('relatorio-equipamentos').innerHTML = `
         <div class="linha-relatorio"><span>Módulo Fotovoltaico</span><span>${nomeModulo} × ${dados.modulo_quantidade}</span></div>
         <div class="linha-relatorio"><span>Inversor</span><span>${nomeInversor} × ${dados.inversor_quantidade}</span></div>
         <div class="linha-relatorio"><span>Potência do Sistema</span><span>${dimensionamento.potencia_escolhida_kwp} kWp</span></div>
     `;
 
-    // --- Bloco: Financeiro ---
     document.getElementById('relatorio-financeiro').innerHTML = `
         <div class="linha-relatorio"><span>Valor do Kit</span><span>${formatarMoeda(dados.valor_kit)}</span></div>
         <div class="linha-relatorio"><span>Custos Extras</span><span>${formatarMoeda(dados.custos_extra)}</span></div>
@@ -396,7 +437,6 @@ function exibirPreviaResultado(dados, resultado) {
         <div class="linha-relatorio"><span>Validade da Proposta</span><span>${dados.validade_dias} dias</span></div>
     `;
 
-    // --- Resultado do dimensionamento ---
     document.getElementById('grade-resultado').innerHTML = `
         <div class="item-resultado"><span class="item-resultado-label">Potência do Sistema</span><span class="item-resultado-valor">${dimensionamento.potencia_escolhida_kwp} kWp</span></div>
         <div class="item-resultado"><span class="item-resultado-label">Geração Média Mensal</span><span class="item-resultado-valor">${dimensionamento.geracao_media_mensal_kwh} kWh</span></div>
@@ -418,7 +458,7 @@ document.getElementById('botao-editar-orcamento').addEventListener('click', () =
 });
 
 // ==========================================================================
-// 7. SALVAR ORÇAMENTO (só acontece depois de confirmar o relatório acima)
+// 7. SALVAR ORÇAMENTO
 // ==========================================================================
 document.getElementById('botao-salvar-orcamento').addEventListener('click', async () => {
     if (!ultimoCalculo) return;
@@ -431,8 +471,8 @@ document.getElementById('botao-salvar-orcamento').addEventListener('click', asyn
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(ultimoCalculo.dadosFormulario)
         });
-        const resultado = await resposta.json();
-        if (!resposta.ok) throw new Error(resultado.erro || 'Falha ao salvar');
+
+        await tratarRespostaApi(resposta);
 
         mensagem.textContent = editando
             ? '✅ Orçamento atualizado com sucesso!'
@@ -471,7 +511,7 @@ function limparFormularioOrcamento() {
 // 8. CONFIGURAÇÕES — catálogo de módulos e inversores
 // ==========================================================================
 async function carregarCatalogos() {
-    await carregarCatalogosNoFormulario(); // reaproveita a busca, já popula catalogoModulos/Inversores
+    await carregarCatalogosNoFormulario();
     renderizarCatalogo('modulos');
     renderizarCatalogo('inversores');
 }
@@ -480,7 +520,7 @@ function renderizarCatalogo(tipo) {
     const lista = tipo === 'modulos' ? catalogoModulos : catalogoInversores;
     const container = document.getElementById(`lista-${tipo}`);
 
-    if (lista.length === 0) {
+    if (!lista || lista.length === 0) {
         container.innerHTML = `<p style="color:var(--cor-texto-secundario); font-size:13.5px;">Nenhum ${tipo === 'modulos' ? 'módulo' : 'inversor'} cadastrado ainda.</p>`;
         return;
     }
@@ -498,8 +538,13 @@ function renderizarCatalogo(tipo) {
 
     container.querySelectorAll('.botao-remover-item').forEach(botao => {
         botao.addEventListener('click', async () => {
-            await fetch(`/api/${botao.dataset.tipo}/${botao.dataset.id}`, { method: 'DELETE' });
-            carregarCatalogos();
+            try {
+                const resposta = await fetch(`/api/${botao.dataset.tipo}/${botao.dataset.id}`, { method: 'DELETE' });
+                await tratarRespostaApi(resposta);
+                carregarCatalogos();
+            } catch (erro) {
+                alert(`❌ Erro ao excluir item: ${erro.message}`);
+            }
         });
     });
 }
@@ -519,8 +564,7 @@ document.getElementById('botao-add-modulo').addEventListener('click', async () =
         const resposta = await fetch('/api/modulos', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados)
         });
-        const resultado = await resposta.json();
-        if (!resposta.ok) throw new Error(resultado.erro || 'Falha ao cadastrar módulo');
+        await tratarRespostaApi(resposta);
 
         ['modulo-fabricante', 'modulo-modelo', 'modulo-potencia', 'modulo-peso'].forEach(id => document.getElementById(id).value = '');
         carregarCatalogos();
@@ -544,8 +588,7 @@ document.getElementById('botao-add-inversor').addEventListener('click', async ()
         const resposta = await fetch('/api/inversores', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados)
         });
-        const resultado = await resposta.json();
-        if (!resposta.ok) throw new Error(resultado.erro || 'Falha ao cadastrar inversor');
+        await tratarRespostaApi(resposta);
 
         ['inversor-fabricante', 'inversor-modelo', 'inversor-potencia', 'inversor-monitoramento'].forEach(id => document.getElementById(id).value = '');
         carregarCatalogos();
