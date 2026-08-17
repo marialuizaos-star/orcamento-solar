@@ -1,20 +1,18 @@
 // ==========================================================================
-// 💰 MÁSCARA DE VALOR EM REAIS — formata "R$ 1.234,56" enquanto digita
+// 💰 MÁSCARA DE VALOR EM REAIS
 // ==========================================================================
 function aplicarMascaraMoeda(valorBruto) {
-    const digitos = valorBruto.replace(/\D/g, ''); // só números, trata como centavos
+    const digitos = valorBruto.replace(/\D/g, '');
     if (!digitos) return '';
     const numero = parseInt(digitos, 10) / 100;
     return numero.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-// Converte "R$ 1.234,56" de volta pra número (1234.56), pra cálculo/envio
 function valorMascaradoParaNumero(valorMascarado) {
     const digitos = (valorMascarado || '').replace(/\D/g, '');
     return digitos ? parseInt(digitos, 10) / 100 : 0;
 }
 
-// Mesma ideia, mas com 3 casas decimais — convenção usual pra tarifa de kWh (ex: R$ 0,712)
 function aplicarMascaraTarifa(valorBruto) {
     const digitos = valorBruto.replace(/\D/g, '');
     if (!digitos) return '';
@@ -56,7 +54,7 @@ const MESES_LABEL_COMPLETO = {
 
 let catalogoModulos = [];
 let catalogoInversores = [];
-let ultimoCalculo = null;   // guarda o resultado do /api/calcular antes de salvar
+let ultimoCalculo = null;
 let idOrcamentoSelecionado = null;
 let orcamentoEditandoId = null;
 
@@ -64,7 +62,6 @@ function formatarMoeda(valor) {
     return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-// Função auxiliar para lidar com respostas da API de forma segura
 async function tratarRespostaApi(resposta) {
     const contentType = resposta.headers.get('content-type');
     let dados = null;
@@ -73,12 +70,12 @@ async function tratarRespostaApi(resposta) {
         dados = await resposta.json();
     } else {
         const textoHtml = await resposta.text();
-        console.error('Resposta não-JSON recebida do backend:', textoHtml);
-        throw new Error(`Erro no backend (${resposta.status} ${resposta.statusText}). Verifique os logs do servidor.`);
+        console.error('Resposta não-JSON recebida:', textoHtml);
+        throw new Error(`Erro ${resposta.status} (${resposta.statusText || 'Falha no servidor'}). Verifique os logs.`);
     }
 
     if (!resposta.ok) {
-        throw new Error(dados?.erro || dados?.message || `Falha na requisição (Status: ${resposta.status})`);
+        throw new Error(dados?.erro || dados?.message || `Erro ${resposta.status}`);
     }
 
     return dados;
@@ -255,7 +252,7 @@ document.getElementById('modal-botao-editar').addEventListener('click', async ()
         modalDetalhes.classList.remove('mostrar');
         irParaTela('novo-orcamento');
     } catch (erro) {
-        alert(`❌ Não foi possível carregar os dados para edição: ${erro.message}`);
+        alert(`❌ Não foi possível carregar para edição: ${erro.message}`);
     }
 });
 
@@ -272,12 +269,11 @@ document.getElementById('modal-botao-excluir').addEventListener('click', async (
 });
 
 // ==========================================================================
-// 5. NOVO ORÇAMENTO — mês de referência do consumo
+// 5. NOVO ORÇAMENTO
 // ==========================================================================
 const campoMesReferencia = document.getElementById('campo-mes-referencia');
 campoMesReferencia.innerHTML = MESES.map(m => `<option value="${m.chave}">${MESES_LABEL_COMPLETO[m.chave]}</option>`).join('');
 
-// Autocomplete de cidade
 const campoCidade = document.getElementById('campo-cidade');
 const listaSugestoes = document.getElementById('sugestoes-cidade');
 let temporizadorCidade = null;
@@ -312,7 +308,6 @@ document.addEventListener('click', (e) => {
     if (!e.target.closest('.grupo-campo-relativo')) listaSugestoes.classList.remove('mostrar');
 });
 
-// Carrega os selects de módulo/inversor a partir do catálogo
 async function carregarCatalogosNoFormulario() {
     try {
         const [modulos, inversores] = await Promise.all([
@@ -338,7 +333,7 @@ async function carregarCatalogosNoFormulario() {
 }
 
 // ==========================================================================
-// 6. CALCULAR (preview, sem salvar)
+// 6. CALCULAR
 // ==========================================================================
 function coletarDadosDoFormulario() {
     const mesReferencia = campoMesReferencia.value;
@@ -508,7 +503,7 @@ function limparFormularioOrcamento() {
 }
 
 // ==========================================================================
-// 8. CONFIGURAÇÕES — catálogo de módulos e inversores
+// 8. CONFIGURAÇÕES
 // ==========================================================================
 async function carregarCatalogos() {
     await carregarCatalogosNoFormulario();

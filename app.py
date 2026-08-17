@@ -16,7 +16,6 @@ from pdf_proposta import gerar_pdf_proposta
 app = Flask(__name__, static_folder='public', static_url_path='')
 CORS(app)
 
-# Dados da empresa exibidos no PDF (dá pra trocar aqui até virar uma tela de configurações)
 DADOS_EMPRESA = {
     'nome': '3S Engenharia',
     'cnpj': '30.635.438/0001-07',
@@ -34,8 +33,7 @@ DB_CONFIG = {
 }
 
 DIR_SEED = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'seed_data')
-
-FUSO_ACRE = ZoneInfo("America/Rio_Branco")  # UTC-5, sem horário de verão
+FUSO_ACRE = ZoneInfo("America/Rio_Branco")
 
 
 def obter_conexao():
@@ -44,8 +42,6 @@ def obter_conexao():
     else:
         conn = psycopg2.connect(**DB_CONFIG)
     conn.set_client_encoding('UTF8')
-    # Faz NOW() (usado no DEFAULT de data_criacao dos orçamentos) refletir
-    # o horário do Acre, não o do servidor
     cursor_fuso = conn.cursor()
     cursor_fuso.execute("SET TIME ZONE 'America/Rio_Branco';")
     cursor_fuso.close()
@@ -57,11 +53,6 @@ def servir_pagina_inicial():
     return send_from_directory(app.static_folder, "index.html")
 
 
-# ==========================================================================
-# 🌱 CARGA AUTOMÁTICA DOS BANCOS GRANDES (cidades, irradiância, perdas por UF)
-# Roda sozinho ao iniciar o app — só insere se a tabela ainda estiver vazia,
-# então é seguro rodar de novo a cada deploy (não duplica).
-# ==========================================================================
 def semear_banco_se_vazio():
     conn = obter_conexao()
     cursor = conn.cursor()
@@ -81,7 +72,7 @@ def semear_banco_se_vazio():
 
     cursor.execute("SELECT COUNT(*) FROM irradiancia;")
     if cursor.fetchone()[0] == 0:
-        print("🌱 Carregando pontos de irradiância (pode levar um minuto)...")
+        print("🌱 Carregando pontos de irradiância...")
         with open(os.path.join(DIR_SEED, 'irradiancia.csv'), encoding='utf-8') as f:
             leitor = csv.DictReader(f)
             linhas = [
@@ -105,7 +96,6 @@ def semear_banco_se_vazio():
         with open(os.path.join(DIR_SEED, 'perdas_uf.csv'), encoding='utf-8') as f:
             leitor = csv.DictReader(f)
             linhas = [(r['uf'], float(r['perdas'])) for r in leitor if r['perdas']]
-        # Completa os estados sem valor cadastrado com a perda de reserva
         todas_ufs = {'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB',
                      'PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'}
         ufs_com_valor = {uf for uf, _ in linhas}
@@ -116,16 +106,13 @@ def semear_banco_se_vazio():
             "INSERT INTO perdas_uf (uf, perdas) VALUES %s ON CONFLICT (uf) DO NOTHING;",
             linhas
         )
-        print(f"✅ {len(linhas)} estados carregados (com reserva pros que faltavam na planilha original).")
+        print(f"✅ {len(linhas)} estados carregados.")
 
     conn.commit()
     cursor.close()
     conn.close()
 
 
-# ==========================================================================
-# 🏙️ CIDADES (autocomplete no formulário)
-# ==========================================================================
 @app.route("/api/cidades", methods=["GET"])
 def buscar_cidades():
     termo = request.args.get("q", "").strip()
@@ -144,9 +131,6 @@ def buscar_cidades():
     return jsonify(resultado), 200
 
 
-# ==========================================================================
-# ☀️ CÁLCULO DO DIMENSIONAMENTO (preview, sem salvar)
-# ==========================================================================
 @app.route("/api/calcular", methods=["POST"])
 def calcular():
     try:
@@ -159,7 +143,6 @@ def calcular():
         if not cidade:
             return jsonify({"erro": "Cidade não encontrada"}), 404
 
-        # Busca o ponto de irradiância mais próximo direto no banco (ordenando pela distância)
         cursor.execute("""
             SELECT anual, jan, fev, mar, abr, mai, jun, jul, ago, set_ AS set, out, nov, dez
             FROM irradiancia
@@ -193,9 +176,6 @@ def calcular():
         return jsonify({"erro": str(e)}), 500
 
 
-# ==========================================================================
-# 🔧 CATÁLOGO DE MÓDULOS
-# ==========================================================================
 @app.route("/api/modulos", methods=["GET"])
 def listar_modulos():
     conn = obter_conexao()
@@ -238,9 +218,6 @@ def deletar_modulo(id_modulo):
     return jsonify({"mensagem": "Módulo removido!"}), 200
 
 
-# ==========================================================================
-# 🔧 CATÁLOGO DE INVERSORES
-# ==========================================================================
 @app.route("/api/inversores", methods=["GET"])
 def listar_inversores():
     conn = obter_conexao()
@@ -283,17 +260,11 @@ def deletar_inversor(id_inversor):
     return jsonify({"mensagem": "Inversor removido!"}), 200
 
 
-# ==========================================================================
-# 📋 ORÇAMENTOS
-# ==========================================================================
-
 def _linha_para_consumo_dict(linha):
     return {m: float(linha[f'consumo_{m}']) for m in MESES}
 
 
 def _recalcular_orcamento(cursor, linha):
-    """Reconstrói o dimensionamento/financeiro de um orçamento salvo
-    (usado tanto pra exibir detalhes quanto pra gerar o PDF)."""
     cursor.execute("SELECT latitude, longitude, uf FROM cidades WHERE municipio_uf = %s;", (linha['cidade_uf'],))
     cidade = cursor.fetchone()
 
@@ -446,9 +417,6 @@ def obter_orcamento(id_orcamento):
 
     linha_serializavel = dict(linha)
     linha_serializavel['data_criacao'] = linha['data_criacao'].isoformat()
-    for chave in list(linha_serializavel):
-        if isinstance(linha_serializavel[chave], type(None)):
-            continue
 
     return jsonify({
         'orcamento': linha_serializavel,
@@ -457,6 +425,49 @@ def obter_orcamento(id_orcamento):
         'modulo': modulo,
         'inversor': inversor
     }), 200
+
+
+@app.route("/api/orcamentos/<int:id_orcamento>", methods=["PUT"])
+def atualizar_orcamento(id_orcamento):
+    try:
+        d = request.json
+        conn = obter_conexao()
+        cursor = conn.cursor()
+
+        set_consumo = ', '.join([f"consumo_{m} = %s" for m in MESES])
+        valores_consumo = [d['consumo'][m] for m in MESES]
+
+        cursor.execute(f"""
+            UPDATE orcamentos SET
+                cliente_nome = %s,
+                cidade_uf = %s,
+                tarifa_kwh = %s,
+                classificacao_rede = %s,
+                {set_consumo},
+                valor_kit = %s,
+                custos_extra = %s,
+                lucro_percentual = %s,
+                imposto_percentual = %s,
+                modulo_id = %s,
+                modulo_quantidade = %s,
+                inversor_id = %s,
+                inversor_quantidade = %s,
+                validade_dias = %s
+            WHERE id = %s;
+        """, [
+            d['cliente_nome'], d['cidade_uf'], d['tarifa_kwh'], d.get('classificacao_rede'),
+            *valores_consumo,
+            d['valor_kit'], d.get('custos_extra', 0), d['lucro_percentual'], d.get('imposto_percentual', 0),
+            d.get('modulo_id'), d['modulo_quantidade'], d.get('inversor_id'), d.get('inversor_quantidade', 1),
+            d.get('validade_dias', 7),
+            id_orcamento
+        ])
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"mensagem": "Orçamento atualizado com sucesso!"}), 200
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
 
 
 @app.route("/api/orcamentos/<int:id_orcamento>/status", methods=["PATCH"])
@@ -512,8 +523,6 @@ if __name__ == "__main__":
     debug_ativo = os.environ.get("FLASK_DEBUG", "true").lower() == "true"
     app.run(debug=debug_ativo, host="0.0.0.0", port=porta)
 else:
-    # Quando rodando via gunicorn (produção), o bloco acima não executa —
-    # então garantimos a carga dos bancos aqui também.
     try:
         semear_banco_se_vazio()
     except Exception as e:
