@@ -14,10 +14,28 @@ function valorMascaradoParaNumero(valorMascarado) {
     return digitos ? parseInt(digitos, 10) / 100 : 0;
 }
 
+// Mesma ideia, mas com 3 casas decimais — convenção usual pra tarifa de kWh (ex: R$ 0,712)
+function aplicarMascaraTarifa(valorBruto) {
+    const digitos = valorBruto.replace(/\D/g, '');
+    if (!digitos) return '';
+    const numero = parseInt(digitos, 10) / 1000;
+    return 'R$ ' + numero.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+}
+
+function valorTarifaParaNumero(valorMascarado) {
+    const digitos = (valorMascarado || '').replace(/\D/g, '');
+    return digitos ? parseInt(digitos, 10) / 1000 : 0;
+}
+
 function configurarMascarasDeMoeda() {
     document.querySelectorAll('.campo-mascara-moeda').forEach(campo => {
         campo.addEventListener('input', () => {
             campo.value = aplicarMascaraMoeda(campo.value);
+        });
+    });
+    document.querySelectorAll('.campo-mascara-tarifa').forEach(campo => {
+        campo.addEventListener('input', () => {
+            campo.value = aplicarMascaraTarifa(campo.value);
         });
     });
 }
@@ -185,7 +203,7 @@ document.getElementById('modal-botao-editar').addEventListener('click', async ()
 
     document.getElementById('campo-cliente-nome').value = o.cliente_nome;
     campoCidade.value = o.cidade_uf;
-    document.getElementById('campo-tarifa').value = o.tarifa_kwh;
+    document.getElementById('campo-tarifa').value = aplicarMascaraTarifa(String(Math.round(o.tarifa_kwh * 1000)));
     document.getElementById('campo-rede').value = o.classificacao_rede || 'Monofásica';
     document.getElementById('campo-consumo-mes').value = o.consumo_jan; // os 12 meses guardam o mesmo valor
     document.getElementById('campo-modulo').value = o.modulo_id || '';
@@ -290,7 +308,7 @@ function coletarDadosDoFormulario() {
     return {
         cliente_nome: document.getElementById('campo-cliente-nome').value.trim(),
         cidade_uf: campoCidade.value.trim(),
-        tarifa_kwh: parseFloat(document.getElementById('campo-tarifa').value) || 0,
+        tarifa_kwh: valorTarifaParaNumero(document.getElementById('campo-tarifa').value),
         classificacao_rede: document.getElementById('campo-rede').value,
         mes_referencia: mesReferencia,
         consumo_mes: consumoMes,
