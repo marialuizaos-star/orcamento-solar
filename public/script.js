@@ -13,6 +13,19 @@ function valorMascaradoParaNumero(valorMascarado) {
     return digitos ? parseInt(digitos, 10) / 100 : 0;
 }
 
+function aplicarMascaraCpf(valorBruto) {
+    const digitos = valorBruto.replace(/\D/g, '').slice(0, 11);
+    return digitos
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
+
+function aplicarMascaraCep(valorBruto) {
+    const digitos = valorBruto.replace(/\D/g, '').slice(0, 8);
+    return digitos.replace(/(\d{5})(\d)/, '$1-$2');
+}
+
 function aplicarMascaraTarifa(valorBruto) {
     const digitos = valorBruto.replace(/\D/g, '');
     if (!digitos) return '';
@@ -36,6 +49,57 @@ function configurarMascarasDeMoeda() {
             campo.value = aplicarMascaraTarifa(campo.value);
         });
     });
+    document.querySelectorAll('.campo-mascara-cpf').forEach(campo => {
+        campo.addEventListener('input', () => {
+            campo.value = aplicarMascaraCpf(campo.value);
+        });
+    });
+    document.querySelectorAll('.campo-mascara-cep').forEach(campo => {
+        campo.addEventListener('input', () => {
+            campo.value = aplicarMascaraCep(campo.value);
+        });
+    });
+}
+
+// ==========================================================================
+// 🔒 VALIDAÇÃO DE CAMPOS NUMÉRICOS
+// ==========================================================================
+const REGRAS_NUMERICAS = {
+    'campo-consumo-mes': { min: 1, max: 1000000, inteiro: false, nome: 'Consumo do Mês' },
+    'campo-lucro': { min: 0, max: 500, inteiro: false, nome: 'Margem de Lucro' },
+    'campo-imposto': { min: 0, max: 100, inteiro: false, nome: 'Imposto sobre o Lucro' },
+    'campo-validade': { min: 1, max: 365, inteiro: true, nome: 'Validade da Proposta' }
+};
+
+function configurarValidacaoNumerica() {
+    Object.keys(REGRAS_NUMERICAS).forEach(id => {
+        const campo = document.getElementById(id);
+        if (!campo) return;
+        campo.addEventListener('keydown', (e) => {
+            if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault();
+            if (REGRAS_NUMERICAS[id].inteiro && e.key === '.') e.preventDefault();
+        });
+        campo.addEventListener('input', () => {
+            campo.value = REGRAS_NUMERICAS[id].inteiro
+                ? campo.value.replace(/[^0-9]/g, '')
+                : campo.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+        });
+    });
+}
+
+function validarCamposNumericos() {
+    for (const id of Object.keys(REGRAS_NUMERICAS)) {
+        const regra = REGRAS_NUMERICAS[id];
+        const valor = parseFloat(document.getElementById(id).value);
+        if (isNaN(valor)) continue;
+        if (valor < regra.min || valor > regra.max) {
+            return `${regra.nome} deve estar entre ${regra.min} e ${regra.max}.`;
+        }
+        if (regra.inteiro && !Number.isInteger(valor)) {
+            return `${regra.nome} deve ser um número inteiro.`;
+        }
+    }
+    return null;
 }
 
 // ==========================================================================
@@ -232,6 +296,13 @@ document.getElementById('modal-botao-editar').addEventListener('click', async ()
         await carregarCatalogosNoFormulario();
 
         document.getElementById('campo-cliente-nome').value = o.cliente_nome;
+        document.getElementById('campo-cliente-cpf').value = o.cliente_cpf || '';
+        document.getElementById('campo-cliente-cep').value = o.cliente_cep || '';
+        document.getElementById('campo-cliente-bairro').value = o.cliente_bairro || '';
+        document.getElementById('campo-cliente-rua').value = o.cliente_rua || '';
+        document.getElementById('campo-cliente-numero').value = o.cliente_numero || '';
+        document.getElementById('campo-vendedor-nome').value = o.responsavel_nome || '';
+        document.getElementById('campo-vendedor-cargo').value = o.responsavel_cargo || '';
         campoCidade.value = o.cidade_uf;
         document.getElementById('campo-tarifa').value = aplicarMascaraTarifa(String(Math.round(o.tarifa_kwh * 1000)));
         document.getElementById('campo-rede').value = o.classificacao_rede || 'Monofásica';
@@ -347,6 +418,13 @@ function coletarDadosDoFormulario() {
 
     return {
         cliente_nome: document.getElementById('campo-cliente-nome').value.trim(),
+        cliente_cpf: document.getElementById('campo-cliente-cpf').value.trim(),
+        cliente_cep: document.getElementById('campo-cliente-cep').value.trim(),
+        cliente_bairro: document.getElementById('campo-cliente-bairro').value.trim(),
+        cliente_rua: document.getElementById('campo-cliente-rua').value.trim(),
+        cliente_numero: document.getElementById('campo-cliente-numero').value.trim(),
+        responsavel_nome: document.getElementById('campo-vendedor-nome').value.trim() || null,
+        responsavel_cargo: document.getElementById('campo-vendedor-cargo').value.trim() || null,
         cidade_uf: campoCidade.value.trim(),
         tarifa_kwh: valorTarifaParaNumero(document.getElementById('campo-tarifa').value),
         classificacao_rede: document.getElementById('campo-rede').value,
@@ -370,6 +448,14 @@ document.getElementById('botao-calcular').addEventListener('click', async () => 
     const mensagem = document.getElementById('mensagem-orcamento');
     mensagem.style.display = 'none';
     const dados = coletarDadosDoFormulario();
+
+    const erroNumerico = validarCamposNumericos();
+    if (erroNumerico) {
+        mensagem.textContent = `❌ ${erroNumerico}`;
+        mensagem.className = 'mensagem-feedback erro';
+        mensagem.style.display = 'block';
+        return;
+    }
 
     if (!dados.cliente_nome || !dados.cidade_uf || !dados.valor_kit) {
         mensagem.textContent = '❌ Preencha ao menos nome do cliente, cidade e valor do kit.';
@@ -488,6 +574,13 @@ document.getElementById('botao-salvar-orcamento').addEventListener('click', asyn
 
 function limparFormularioOrcamento() {
     document.getElementById('campo-cliente-nome').value = '';
+    document.getElementById('campo-cliente-cpf').value = '';
+    document.getElementById('campo-cliente-cep').value = '';
+    document.getElementById('campo-cliente-bairro').value = '';
+    document.getElementById('campo-cliente-rua').value = '';
+    document.getElementById('campo-cliente-numero').value = '';
+    document.getElementById('campo-vendedor-nome').value = '';
+    document.getElementById('campo-vendedor-cargo').value = '';
     campoCidade.value = '';
     document.getElementById('campo-tarifa').value = '';
     campoMesReferencia.selectedIndex = 0;
@@ -599,3 +692,4 @@ document.getElementById('botao-add-inversor').addEventListener('click', async ()
 carregarDashboard();
 carregarCatalogosNoFormulario();
 configurarMascarasDeMoeda();
+configurarValidacaoNumerica();

@@ -370,26 +370,30 @@ def criar_orcamento():
 
         cursor.execute(f"""
             INSERT INTO orcamentos (
-                cliente_nome, cidade_uf, tarifa_kwh, classificacao_rede,
+                cliente_nome, cliente_cpf, cliente_cep, cliente_bairro, cliente_rua, cliente_numero,
+                cidade_uf, tarifa_kwh, classificacao_rede,
                 {colunas_consumo},
                 valor_kit, custos_extra, lucro_percentual, imposto_percentual, taxa_financiamento_mensal,
                 modulo_id, modulo_quantidade, inversor_id, inversor_quantidade,
-                responsavel_nome, responsavel_contato, validade_dias
+                responsavel_nome, responsavel_contato, responsavel_cargo, validade_dias
             ) VALUES (
-                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s,
+                %s, %s, %s,
                 {placeholders_consumo},
                 %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s
+                %s, %s, %s, %s
             ) RETURNING id;
         """, [
-            d['cliente_nome'], d['cidade_uf'], d['tarifa_kwh'], d.get('classificacao_rede'),
+            d['cliente_nome'], d.get('cliente_cpf'), d.get('cliente_cep'), d.get('cliente_bairro'),
+            d.get('cliente_rua'), d.get('cliente_numero'),
+            d['cidade_uf'], d['tarifa_kwh'], d.get('classificacao_rede'),
             *valores_consumo,
             d['valor_kit'], d.get('custos_extra', 0), d['lucro_percentual'], d.get('imposto_percentual', 0),
             d.get('taxa_financiamento_mensal', 0.009),
             d.get('modulo_id'), d['modulo_quantidade'], d.get('inversor_id'), d.get('inversor_quantidade', 1),
             d.get('responsavel_nome', DADOS_EMPRESA['responsavel']), d.get('responsavel_contato', DADOS_EMPRESA['contato']),
-            d.get('validade_dias', 7)
+            d.get('responsavel_cargo'), d.get('validade_dias', 7)
         ])
         id_orcamento = cursor.fetchone()[0]
         conn.commit()
@@ -440,6 +444,11 @@ def atualizar_orcamento(id_orcamento):
         cursor.execute(f"""
             UPDATE orcamentos SET
                 cliente_nome = %s,
+                cliente_cpf = %s,
+                cliente_cep = %s,
+                cliente_bairro = %s,
+                cliente_rua = %s,
+                cliente_numero = %s,
                 cidade_uf = %s,
                 tarifa_kwh = %s,
                 classificacao_rede = %s,
@@ -452,13 +461,18 @@ def atualizar_orcamento(id_orcamento):
                 modulo_quantidade = %s,
                 inversor_id = %s,
                 inversor_quantidade = %s,
+                responsavel_nome = %s,
+                responsavel_cargo = %s,
                 validade_dias = %s
             WHERE id = %s;
         """, [
-            d['cliente_nome'], d['cidade_uf'], d['tarifa_kwh'], d.get('classificacao_rede'),
+            d['cliente_nome'], d.get('cliente_cpf'), d.get('cliente_cep'), d.get('cliente_bairro'),
+            d.get('cliente_rua'), d.get('cliente_numero'),
+            d['cidade_uf'], d['tarifa_kwh'], d.get('classificacao_rede'),
             *valores_consumo,
             d['valor_kit'], d.get('custos_extra', 0), d['lucro_percentual'], d.get('imposto_percentual', 0),
             d.get('modulo_id'), d['modulo_quantidade'], d.get('inversor_id'), d.get('inversor_quantidade', 1),
+            d.get('responsavel_nome'), d.get('responsavel_cargo'),
             d.get('validade_dias', 7),
             id_orcamento
         ])
