@@ -130,12 +130,8 @@
                 <h3 class="subsecao-titulo">Vendedor Responsável</h3>
                 <div class="formulario-grade">
                     <div class="grupo-campo">
-                        <label>Nome do Vendedor</label>
-                        <input type="text" id="campo-vendedor-nome" placeholder="Ex: Thales Campos" maxlength="100">
-                    </div>
-                    <div class="grupo-campo">
-                        <label>Cargo / Função</label>
-                        <input type="text" id="campo-vendedor-cargo" placeholder="Ex: Engenheiro Responsável" maxlength="60">
+                        <label>Vendedor</label>
+                        <select id="campo-vendedor"></select>
                     </div>
                 </div>
 
@@ -299,6 +295,25 @@
                 <button class="botao-primario" id="botao-add-inversor">+ Adicionar Inversor</button>
 
                 <div class="lista-catalogo" id="lista-inversores"></div>
+            </div>
+
+            <div class="card-painel">
+                <h2 class="painel-titulo">Catálogo de Vendedores</h2>
+                <p class="painel-subtitulo">Cadastre os vendedores pra selecionar no orçamento</p>
+
+                <div class="formulario-grade">
+                    <div class="grupo-campo">
+                        <label>Nome</label>
+                        <input type="text" id="vendedor-nome" placeholder="Ex: Thales Campos" maxlength="100">
+                    </div>
+                    <div class="grupo-campo">
+                        <label>Cargo / Função</label>
+                        <input type="text" id="vendedor-cargo" placeholder="Ex: Engenheiro Responsável" maxlength="60">
+                    </div>
+                </div>
+                <button class="botao-primario" id="botao-add-vendedor">+ Adicionar Vendedor</button>
+
+                <div class="lista-catalogo" id="lista-vendedores"></div>
             </div>
         </section>
 

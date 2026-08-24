@@ -260,6 +260,46 @@ def deletar_inversor(id_inversor):
     return jsonify({"mensagem": "Inversor removido!"}), 200
 
 
+@app.route("/api/vendedores", methods=["GET"])
+def listar_vendedores():
+    conn = obter_conexao()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT * FROM vendedores ORDER BY nome;")
+    resultado = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify(resultado), 200
+
+
+@app.route("/api/vendedores", methods=["POST"])
+def criar_vendedor():
+    try:
+        dados = request.json
+        conn = obter_conexao()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO vendedores (nome, cargo) VALUES (%s,%s) RETURNING id;
+        """, (dados["nome"], dados.get("cargo")))
+        id_vendedor = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"mensagem": "Vendedor cadastrado!", "id": id_vendedor}), 201
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+
+@app.route("/api/vendedores/<int:id_vendedor>", methods=["DELETE"])
+def deletar_vendedor(id_vendedor):
+    conn = obter_conexao()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM vendedores WHERE id = %s;", (id_vendedor,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"mensagem": "Vendedor removido!"}), 200
+
+
 def _linha_para_consumo_dict(linha):
     return {m: float(linha[f'consumo_{m}']) for m in MESES}
 
@@ -375,14 +415,14 @@ def criar_orcamento():
                 {colunas_consumo},
                 valor_kit, custos_extra, lucro_percentual, imposto_percentual, taxa_financiamento_mensal,
                 modulo_id, modulo_quantidade, inversor_id, inversor_quantidade,
-                responsavel_nome, responsavel_contato, responsavel_cargo, validade_dias
+                responsavel_nome, responsavel_contato, responsavel_cargo, vendedor_id, validade_dias
             ) VALUES (
                 %s, %s, %s, %s, %s, %s,
                 %s, %s, %s,
                 {placeholders_consumo},
                 %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s, %s
+                %s, %s, %s, %s, %s
             ) RETURNING id;
         """, [
             d['cliente_nome'], d.get('cliente_cpf'), d.get('cliente_cep'), d.get('cliente_bairro'),
@@ -393,7 +433,7 @@ def criar_orcamento():
             d.get('taxa_financiamento_mensal', 0.009),
             d.get('modulo_id'), d['modulo_quantidade'], d.get('inversor_id'), d.get('inversor_quantidade', 1),
             d.get('responsavel_nome', DADOS_EMPRESA['responsavel']), d.get('responsavel_contato', DADOS_EMPRESA['contato']),
-            d.get('responsavel_cargo'), d.get('validade_dias', 7)
+            d.get('responsavel_cargo'), d.get('vendedor_id'), d.get('validade_dias', 7)
         ])
         id_orcamento = cursor.fetchone()[0]
         conn.commit()
@@ -463,6 +503,7 @@ def atualizar_orcamento(id_orcamento):
                 inversor_quantidade = %s,
                 responsavel_nome = %s,
                 responsavel_cargo = %s,
+                vendedor_id = %s,
                 validade_dias = %s
             WHERE id = %s;
         """, [
@@ -472,7 +513,7 @@ def atualizar_orcamento(id_orcamento):
             *valores_consumo,
             d['valor_kit'], d.get('custos_extra', 0), d['lucro_percentual'], d.get('imposto_percentual', 0),
             d.get('modulo_id'), d['modulo_quantidade'], d.get('inversor_id'), d.get('inversor_quantidade', 1),
-            d.get('responsavel_nome'), d.get('responsavel_cargo'),
+            d.get('responsavel_nome'), d.get('responsavel_cargo'), d.get('vendedor_id'),
             d.get('validade_dias', 7),
             id_orcamento
         ])

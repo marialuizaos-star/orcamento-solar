@@ -118,6 +118,7 @@ const MESES_LABEL_COMPLETO = {
 
 let catalogoModulos = [];
 let catalogoInversores = [];
+let catalogoVendedores = [];
 let ultimoCalculo = null;
 let idOrcamentoSelecionado = null;
 let orcamentoEditandoId = null;
@@ -301,8 +302,7 @@ document.getElementById('modal-botao-editar').addEventListener('click', async ()
         document.getElementById('campo-cliente-bairro').value = o.cliente_bairro || '';
         document.getElementById('campo-cliente-rua').value = o.cliente_rua || '';
         document.getElementById('campo-cliente-numero').value = o.cliente_numero || '';
-        document.getElementById('campo-vendedor-nome').value = o.responsavel_nome || '';
-        document.getElementById('campo-vendedor-cargo').value = o.responsavel_cargo || '';
+        document.getElementById('campo-vendedor').value = o.vendedor_id || '';
         campoCidade.value = o.cidade_uf;
         document.getElementById('campo-tarifa').value = aplicarMascaraTarifa(String(Math.round(o.tarifa_kwh * 1000)));
         document.getElementById('campo-rede').value = o.classificacao_rede || 'Monofásica';
@@ -381,15 +381,18 @@ document.addEventListener('click', (e) => {
 
 async function carregarCatalogosNoFormulario() {
     try {
-        const [modulos, inversores] = await Promise.all([
+        const [modulos, inversores, vendedores] = await Promise.all([
             fetch('/api/modulos').then(tratarRespostaApi),
-            fetch('/api/inversores').then(tratarRespostaApi)
+            fetch('/api/inversores').then(tratarRespostaApi),
+            fetch('/api/vendedores').then(tratarRespostaApi)
         ]);
         catalogoModulos = modulos;
         catalogoInversores = inversores;
+        catalogoVendedores = vendedores;
 
         const selectModulo = document.getElementById('campo-modulo');
         const selectInversor = document.getElementById('campo-inversor');
+        const selectVendedor = document.getElementById('campo-vendedor');
 
         selectModulo.innerHTML = modulos.length
             ? modulos.map(m => `<option value="${m.id}">${m.fabricante || ''} ${m.modelo} (${m.potencia_wp}Wp)</option>`).join('')
@@ -398,6 +401,10 @@ async function carregarCatalogosNoFormulario() {
         selectInversor.innerHTML = inversores.length
             ? inversores.map(i => `<option value="${i.id}">${i.fabricante || ''} ${i.modelo} (${i.potencia_kw}kW)</option>`).join('')
             : '<option value="">Nenhum inversor cadastrado — vá em Configurações</option>';
+
+        selectVendedor.innerHTML = vendedores.length
+            ? vendedores.map(v => `<option value="${v.id}">${v.nome}${v.cargo ? ' — ' + v.cargo : ''}</option>`).join('')
+            : '<option value="">Nenhum vendedor cadastrado — vá em Configurações</option>';
     } catch (erro) {
         console.error('Erro ao carregar catálogos:', erro);
     }
@@ -423,8 +430,9 @@ function coletarDadosDoFormulario() {
         cliente_bairro: document.getElementById('campo-cliente-bairro').value.trim(),
         cliente_rua: document.getElementById('campo-cliente-rua').value.trim(),
         cliente_numero: document.getElementById('campo-cliente-numero').value.trim(),
-        responsavel_nome: document.getElementById('campo-vendedor-nome').value.trim() || null,
-        responsavel_cargo: document.getElementById('campo-vendedor-cargo').value.trim() || null,
+        responsavel_nome: (catalogoVendedores.find(v => v.id == document.getElementById('campo-vendedor').value) || {}).nome || null,
+        responsavel_cargo: (catalogoVendedores.find(v => v.id == document.getElementById('campo-vendedor').value) || {}).cargo || null,
+        vendedor_id: document.getElementById('campo-vendedor').value || null,
         cidade_uf: campoCidade.value.trim(),
         tarifa_kwh: valorTarifaParaNumero(document.getElementById('campo-tarifa').value),
         classificacao_rede: document.getElementById('campo-rede').value,
@@ -579,8 +587,6 @@ function limparFormularioOrcamento() {
     document.getElementById('campo-cliente-bairro').value = '';
     document.getElementById('campo-cliente-rua').value = '';
     document.getElementById('campo-cliente-numero').value = '';
-    document.getElementById('campo-vendedor-nome').value = '';
-    document.getElementById('campo-vendedor-cargo').value = '';
     campoCidade.value = '';
     document.getElementById('campo-tarifa').value = '';
     campoMesReferencia.selectedIndex = 0;
@@ -602,21 +608,25 @@ async function carregarCatalogos() {
     await carregarCatalogosNoFormulario();
     renderizarCatalogo('modulos');
     renderizarCatalogo('inversores');
+    renderizarCatalogo('vendedores');
 }
 
 function renderizarCatalogo(tipo) {
-    const lista = tipo === 'modulos' ? catalogoModulos : catalogoInversores;
+    const listas = { modulos: catalogoModulos, inversores: catalogoInversores, vendedores: catalogoVendedores };
+    const lista = listas[tipo];
     const container = document.getElementById(`lista-${tipo}`);
 
     if (!lista || lista.length === 0) {
-        container.innerHTML = `<p style="color:var(--cor-texto-secundario); font-size:13.5px;">Nenhum ${tipo === 'modulos' ? 'módulo' : 'inversor'} cadastrado ainda.</p>`;
+        const nomeSingular = { modulos: 'módulo', inversores: 'inversor', vendedores: 'vendedor' }[tipo];
+        container.innerHTML = `<p style="color:var(--cor-texto-secundario); font-size:13.5px;">Nenhum ${nomeSingular} cadastrado ainda.</p>`;
         return;
     }
 
     container.innerHTML = lista.map(item => {
-        const descricao = tipo === 'modulos'
-            ? `<strong>${item.fabricante || ''} ${item.modelo}</strong> — ${item.potencia_wp} Wp`
-            : `<strong>${item.fabricante || ''} ${item.modelo}</strong> — ${item.potencia_kw} kW`;
+        let descricao;
+        if (tipo === 'modulos') descricao = `<strong>${item.fabricante || ''} ${item.modelo}</strong> — ${item.potencia_wp} Wp`;
+        else if (tipo === 'inversores') descricao = `<strong>${item.fabricante || ''} ${item.modelo}</strong> — ${item.potencia_kw} kW`;
+        else descricao = `<strong>${item.nome}</strong>${item.cargo ? ' — ' + item.cargo : ''}`;
         return `
             <div class="item-catalogo">
                 <span class="item-catalogo-texto">${descricao}</span>
@@ -682,6 +692,27 @@ document.getElementById('botao-add-inversor').addEventListener('click', async ()
         carregarCatalogos();
     } catch (erro) {
         alert(`❌ Não foi possível cadastrar o inversor: ${erro.message}`);
+        console.error(erro);
+    }
+});
+
+document.getElementById('botao-add-vendedor').addEventListener('click', async () => {
+    const dados = {
+        nome: document.getElementById('vendedor-nome').value.trim(),
+        cargo: document.getElementById('vendedor-cargo').value.trim() || null
+    };
+    if (!dados.nome) { alert('Preencha ao menos o nome do vendedor.'); return; }
+
+    try {
+        const resposta = await fetch('/api/vendedores', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados)
+        });
+        await tratarRespostaApi(resposta);
+
+        ['vendedor-nome', 'vendedor-cargo'].forEach(id => document.getElementById(id).value = '');
+        carregarCatalogos();
+    } catch (erro) {
+        alert(`❌ Não foi possível cadastrar o vendedor: ${erro.message}`);
         console.error(erro);
     }
 });
