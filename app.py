@@ -258,15 +258,29 @@ def criar_modulo():
         return jsonify({"erro": str(e)}), 500
 
 
-@app.route("/api/modulos/<int:id_modulo>", methods=["DELETE"])
-def deletar_modulo(id_modulo):
+def _excluir_com_tratamento_fk(tabela, id_item, nome_amigavel):
+    """DELETE genérico que trata violação de chave estrangeira (item usado em algum
+    orçamento) com uma mensagem clara em vez de deixar estourar um erro 500 cru."""
     conn = obter_conexao()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM modulos WHERE id = %s;", (id_modulo,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({"mensagem": "Módulo removido!"}), 200
+    try:
+        cursor.execute(f"DELETE FROM {tabela} WHERE id = %s;", (id_item,))
+        conn.commit()
+        return jsonify({"mensagem": f"{nome_amigavel} removido!"}), 200
+    except psycopg2.errors.ForeignKeyViolation:
+        conn.rollback()
+        return jsonify({"erro": f"Não é possível excluir: este {nome_amigavel.lower()} está sendo usado em um ou mais orçamentos."}), 409
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"erro": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.route("/api/modulos/<int:id_modulo>", methods=["DELETE"])
+def deletar_modulo(id_modulo):
+    return _excluir_com_tratamento_fk("modulos", id_modulo, "Módulo")
 
 
 @app.route("/api/inversores", methods=["GET"])
@@ -302,13 +316,7 @@ def criar_inversor():
 
 @app.route("/api/inversores/<int:id_inversor>", methods=["DELETE"])
 def deletar_inversor(id_inversor):
-    conn = obter_conexao()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM inversores WHERE id = %s;", (id_inversor,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({"mensagem": "Inversor removido!"}), 200
+    return _excluir_com_tratamento_fk("inversores", id_inversor, "Inversor")
 
 
 @app.route("/api/vendedores", methods=["GET"])
@@ -342,13 +350,7 @@ def criar_vendedor():
 
 @app.route("/api/vendedores/<int:id_vendedor>", methods=["DELETE"])
 def deletar_vendedor(id_vendedor):
-    conn = obter_conexao()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM vendedores WHERE id = %s;", (id_vendedor,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({"mensagem": "Vendedor removido!"}), 200
+    return _excluir_com_tratamento_fk("vendedores", id_vendedor, "Vendedor")
 
 
 def _linha_para_consumo_dict(linha):
