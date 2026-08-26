@@ -50,6 +50,7 @@ def calcular_dimensionamento(consumo_mensal_kwh, ponto_irradiancia, perdas_fraca
         geracao_mensal[mes] = potencia_sistema_kwp * irradiancia_mes * DIAS_POR_MES * (1 - perdas_fracao)
 
     geracao_media_mensal = sum(geracao_mensal.values()) / len(geracao_mensal)
+    irradiancia_media_mensal = sum(ponto_irradiancia[m] / 1000 for m in MESES) / len(MESES)
 
     return {
         'consumo_medio_mensal_kwh': round(consumo_medio_mensal, 2),
@@ -58,6 +59,57 @@ def calcular_dimensionamento(consumo_mensal_kwh, ponto_irradiancia, perdas_fraca
         'potencia_escolhida_kwp': round(potencia_sistema_kwp, 3),
         'geracao_mensal_kwh': {m: round(v, 2) for m, v in geracao_mensal.items()},
         'geracao_media_mensal_kwh': round(geracao_media_mensal, 2),
+        'irradiancia_media_mensal_kwh_m2_dia': round(irradiancia_media_mensal, 3),
+    }
+
+
+# Taxa de disponibilidade mínima cobrada pela distribuidora (em kWh), mesmo com 100% de geração solar
+TAXA_DISPONIBILIDADE_KWH = {
+    'Monofásica': 30,
+    'Bifásica': 50,
+    'Trifásica': 100,
+}
+
+
+def validar_tarifa(tarifa_kwh):
+    """Retorna uma mensagem de erro se a tarifa for nula, zero, negativa ou fora de uma
+    faixa plausível (indício de valor desatualizado/errado). None se estiver ok."""
+    if tarifa_kwh is None:
+        return 'Informe a tarifa de energia (R$/kWh).'
+    if tarifa_kwh <= 0:
+        return 'A tarifa de energia deve ser maior que zero.'
+    if tarifa_kwh > 5:
+        return 'Tarifa de energia parece desatualizada (acima de R$ 5,00/kWh). Confira o valor.'
+    return None
+
+
+def calcular_economia_e_payback(consumo_medio_mensal_kwh, geracao_media_mensal_kwh, tarifa_kwh, classificacao_rede, valor_total_investido):
+    """Economia mensal considerando a taxa de disponibilidade mínima da distribuidora
+    (o cliente nunca paga R$ 0, mesmo gerando 100% do consumo) e o payback do investimento."""
+    taxa_disponibilidade_kwh = TAXA_DISPONIBILIDADE_KWH.get(classificacao_rede, 50)
+
+    conta_sem_solar = consumo_medio_mensal_kwh * tarifa_kwh
+    consumo_faturavel_com_solar = max(taxa_disponibilidade_kwh, consumo_medio_mensal_kwh - geracao_media_mensal_kwh)
+    conta_com_solar = consumo_faturavel_com_solar * tarifa_kwh
+    economia_mensal_reais = max(0, conta_sem_solar - conta_com_solar)
+
+    payback_anos = payback_meses = payback_meses_total = None
+    if economia_mensal_reais > 0 and valor_total_investido > 0:
+        payback_meses_total = valor_total_investido / economia_mensal_reais
+        payback_anos = int(payback_meses_total // 12)
+        payback_meses = round(payback_meses_total % 12)
+        if payback_meses == 12:
+            payback_anos += 1
+            payback_meses = 0
+
+    return {
+        'taxa_disponibilidade_kwh': taxa_disponibilidade_kwh,
+        'conta_sem_solar_reais': round(conta_sem_solar, 2),
+        'conta_com_solar_reais': round(conta_com_solar, 2),
+        'economia_mensal_reais': round(economia_mensal_reais, 2),
+        'payback_meses_total': round(payback_meses_total, 1) if payback_meses_total is not None else None,
+        'payback_anos': payback_anos,
+        'payback_meses': payback_meses,
     }
 
 

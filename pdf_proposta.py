@@ -15,6 +15,7 @@ seção, destaque em laranja-coral, logo real da empresa no cabeçalho.
 import os
 from io import BytesIO
 from datetime import datetime
+from xml.sax.saxutils import escape as _esc
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib import colors
@@ -86,6 +87,7 @@ def _estilos():
         'campo_assinatura': ParagraphStyle('campo_assinatura', parent=base['Normal'], fontSize=10.5, textColor=COR_TEXTO, leading=26),
         'valor_destaque': ParagraphStyle('valor_destaque', parent=base['Heading1'], fontSize=18, textColor=COR_TEXTO, alignment=TA_CENTER),
         'celula_tabela': ParagraphStyle('celula_tabela', parent=base['Normal'], fontSize=8.5, textColor=COR_TEXTO, leading=11),
+        'campo_topo': ParagraphStyle('campo_topo', parent=base['Normal'], fontSize=9.5, textColor=COR_TEXTO, leading=12),
     }
 
 
@@ -144,9 +146,9 @@ def gerar_pdf_proposta(dados_empresa, orcamento, dimensionamento, financeiro, mo
     data_proposta = orcamento.get('data_criacao')
     data_formatada = data_proposta.strftime('%d/%m/%Y') if isinstance(data_proposta, datetime) else str(data_proposta)
     tabela_topo = Table([
-        ["Cliente:", orcamento['cliente_nome'], "Data:", data_formatada],
-        ["Responsável:", dados_empresa['responsavel'], "Validade:", f"{orcamento['validade_dias']} dias"],
-        ["Contato:", dados_empresa['contato'], "Cidade:", orcamento['cidade_uf']],
+        ["Cliente:", Paragraph(_esc(orcamento['cliente_nome']), e['campo_topo']), "Data:", data_formatada],
+        ["Responsável:", Paragraph(_esc(dados_empresa['responsavel']), e['campo_topo']), "Validade:", f"{orcamento['validade_dias']} dias"],
+        ["Contato:", Paragraph(_esc(dados_empresa['contato']), e['campo_topo']), "Cidade:", Paragraph(_esc(orcamento['cidade_uf']), e['campo_topo'])],
     ], colWidths=[2.3 * cm, 6.2 * cm, 2 * cm, 5.7 * cm])
     tabela_topo.setStyle(TableStyle([
         ('FONTSIZE', (0, 0), (-1, -1), 9.5),

@@ -150,7 +150,10 @@ async function tratarRespostaApi(resposta) {
 // 2. Navegação entre telas
 // ==========================================================================
 document.querySelectorAll('.nav-item').forEach(botao => {
-    botao.addEventListener('click', () => irParaTela(botao.dataset.tela));
+    botao.addEventListener('click', () => {
+        if (botao.dataset.tela === 'novo-orcamento') limparFormularioOrcamento();
+        irParaTela(botao.dataset.tela);
+    });
 });
 
 function irParaTela(nomeTela) {
@@ -255,7 +258,10 @@ async function abrirDetalhesOrcamento(id) {
             <div class="modal-linha"><span>Cidade</span><span>${dados.orcamento.cidade_uf}</span></div>
             <div class="modal-linha"><span>Potência do Sistema</span><span>${dados.dimensionamento.potencia_escolhida_kwp} kWp</span></div>
             <div class="modal-linha"><span>Geração Média Mensal</span><span>${dados.dimensionamento.geracao_media_mensal_kwh} kWh</span></div>
+            <div class="modal-linha"><span>Irradiação Média Mensal</span><span>${dados.dimensionamento.irradiancia_media_mensal_kwh_m2_dia} kWh/m²/dia</span></div>
             <div class="modal-linha"><span>Valor Total</span><span>${formatarMoeda(dados.financeiro.valor_total)}</span></div>
+            <div class="modal-linha"><span>Economia Mensal Estimada</span><span>${formatarMoeda(dados.economia.economia_mensal_reais)}</span></div>
+            <div class="modal-linha"><span>Payback do Investimento</span><span>${formatarPayback(dados.economia)}</span></div>
             <div class="modal-linha"><span>Data de Criação</span><span>${new Date(dados.orcamento.data_criacao).toLocaleDateString('pt-BR')}</span></div>
         `;
 
@@ -328,6 +334,10 @@ document.getElementById('modal-botao-editar').addEventListener('click', async ()
 });
 
 document.getElementById('modal-botao-excluir').addEventListener('click', async () => {
+    if (orcamentoEditandoId === idOrcamentoSelecionado) {
+        alert('❌ Esse orçamento está em edição. Salve ou cancele a edição antes de excluir.');
+        return;
+    }
     if (!confirm('Excluir esse orçamento? Essa ação não pode ser desfeita.')) return;
     try {
         const resposta = await fetch(`/api/orcamentos/${idOrcamentoSelecionado}`, { method: 'DELETE' });
@@ -367,6 +377,7 @@ campoCidade.addEventListener('input', () => {
                 item.addEventListener('click', () => {
                     campoCidade.value = item.dataset.valor;
                     listaSugestoes.classList.remove('mostrar');
+                    atualizarSugestaoDimensionamento();
                 });
             });
         } catch (erro) {
@@ -378,6 +389,45 @@ campoCidade.addEventListener('input', () => {
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.grupo-campo-relativo')) listaSugestoes.classList.remove('mostrar');
 });
+
+// ==========================================================================
+// 🤖 SUGESTÃO AUTOMÁTICA DE DIMENSIONAMENTO
+// ==========================================================================
+async function atualizarSugestaoDimensionamento() {
+    const cidadeUf = campoCidade.value.trim();
+    const consumoMes = parseFloat(document.getElementById('campo-consumo-mes').value) || 0;
+    if (!cidadeUf || !consumoMes) return;
+
+    const consumo = {};
+    MESES.forEach(m => { consumo[m.chave] = consumoMes; });
+
+    try {
+        const resposta = await fetch('/api/sugerir-dimensionamento', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cidade_uf: cidadeUf, consumo })
+        });
+        const resultado = await tratarRespostaApi(resposta);
+        const potenciaSugeridaKwp = resultado.potencia_sugerida_kwp;
+
+        const modulo = catalogoModulos.find(m => m.id == document.getElementById('campo-modulo').value);
+        if (modulo) {
+            const qtdModulos = Math.max(1, Math.ceil((potenciaSugeridaKwp * 1000) / modulo.potencia_wp));
+            document.getElementById('campo-modulo-qtd').value = qtdModulos;
+
+            const inversor = catalogoInversores.find(i => i.id == document.getElementById('campo-inversor').value);
+            if (inversor) {
+                const potenciaArrayKwp = (modulo.potencia_wp * qtdModulos) / 1000;
+                document.getElementById('campo-inversor-qtd').value = Math.max(1, Math.ceil(potenciaArrayKwp / inversor.potencia_kw));
+            }
+        }
+    } catch (erro) {
+        console.error('Erro ao sugerir dimensionamento:', erro);
+    }
+}
+
+document.getElementById('campo-consumo-mes').addEventListener('change', atualizarSugestaoDimensionamento);
+document.getElementById('campo-modulo').addEventListener('change', atualizarSugestaoDimensionamento);
+document.getElementById('campo-inversor').addEventListener('change', atualizarSugestaoDimensionamento);
 
 async function carregarCatalogosNoFormulario() {
     try {
@@ -477,6 +527,18 @@ document.getElementById('botao-calcular').addEventListener('click', async () => 
         mensagem.style.display = 'block';
         return;
     }
+    if (!dados.modulo_quantidade || dados.modulo_quantidade <= 0 || !dados.inversor_quantidade || dados.inversor_quantidade <= 0) {
+        mensagem.textContent = '❌ A quantidade de módulos e de inversores deve ser maior que zero.';
+        mensagem.className = 'mensagem-feedback erro';
+        mensagem.style.display = 'block';
+        return;
+    }
+    if (!dados.tarifa_kwh || dados.tarifa_kwh <= 0) {
+        mensagem.textContent = '❌ Informe uma tarifa de energia (R$/kWh) válida.';
+        mensagem.className = 'mensagem-feedback erro';
+        mensagem.style.display = 'block';
+        return;
+    }
 
     try {
         const resposta = await fetch('/api/calcular', {
@@ -496,8 +558,16 @@ document.getElementById('botao-calcular').addEventListener('click', async () => 
     }
 });
 
+function formatarPayback(economia) {
+    if (economia.payback_anos === null) return 'Não se paga (economia insuficiente)';
+    const partes = [];
+    if (economia.payback_anos > 0) partes.push(`${economia.payback_anos} ano${economia.payback_anos > 1 ? 's' : ''}`);
+    if (economia.payback_meses > 0) partes.push(`${economia.payback_meses} ${economia.payback_meses > 1 ? 'meses' : 'mês'}`);
+    return partes.length ? partes.join(' e ') : 'menos de 1 mês';
+}
+
 function exibirPreviaResultado(dados, resultado) {
-    const { dimensionamento, financeiro } = resultado;
+    const { dimensionamento, financeiro, economia } = resultado;
 
     const modulo = catalogoModulos.find(m => m.id == dados.modulo_id);
     const inversor = catalogoInversores.find(i => i.id == dados.inversor_id);
@@ -529,7 +599,10 @@ function exibirPreviaResultado(dados, resultado) {
     document.getElementById('grade-resultado').innerHTML = `
         <div class="item-resultado"><span class="item-resultado-label">Potência do Sistema</span><span class="item-resultado-valor">${dimensionamento.potencia_escolhida_kwp} kWp</span></div>
         <div class="item-resultado"><span class="item-resultado-label">Geração Média Mensal</span><span class="item-resultado-valor">${dimensionamento.geracao_media_mensal_kwh} kWh</span></div>
+        <div class="item-resultado"><span class="item-resultado-label">Irradiação Média Mensal</span><span class="item-resultado-valor">${dimensionamento.irradiancia_media_mensal_kwh_m2_dia} kWh/m²/dia</span></div>
         <div class="item-resultado"><span class="item-resultado-label">Valor Total</span><span class="item-resultado-valor">${formatarMoeda(financeiro.valor_total)}</span></div>
+        <div class="item-resultado"><span class="item-resultado-label">Economia Mensal Estimada</span><span class="item-resultado-valor">${formatarMoeda(economia.economia_mensal_reais)}</span></div>
+        <div class="item-resultado"><span class="item-resultado-label">Payback do Investimento</span><span class="item-resultado-valor">${formatarPayback(economia)}</span></div>
     `;
 
     const tabelaGeracao = document.getElementById('tabela-geracao-mensal');

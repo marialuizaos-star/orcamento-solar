@@ -9,7 +9,8 @@ from psycopg2.extras import RealDictCursor, execute_values
 
 from calculo_solar import (
     encontrar_ponto_mais_proximo, calcular_dimensionamento,
-    calcular_financeiro, MESES, PERDAS_PADRAO_UF_AUSENTE
+    calcular_financeiro, calcular_economia_e_payback, validar_tarifa,
+    MESES, PERDAS_PADRAO_UF_AUSENTE
 )
 from pdf_proposta import gerar_pdf_proposta
 
@@ -131,10 +132,55 @@ def buscar_cidades():
     return jsonify(resultado), 200
 
 
+@app.route("/api/sugerir-dimensionamento", methods=["POST"])
+def sugerir_dimensionamento():
+    try:
+        dados = request.json
+        conn = obter_conexao()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        cursor.execute("SELECT latitude, longitude, uf FROM cidades WHERE municipio_uf = %s;", (dados["cidade_uf"],))
+        cidade = cursor.fetchone()
+        if not cidade:
+            cursor.close()
+            conn.close()
+            return jsonify({"erro": "Cidade não encontrada"}), 404
+
+        cursor.execute("""
+            SELECT anual, jan, fev, mar, abr, mai, jun, jul, ago, set_ AS set, out, nov, dez
+            FROM irradiancia
+            ORDER BY (lat - %s)^2 + (lon - %s)^2 ASC
+            LIMIT 1;
+        """, (cidade["latitude"], cidade["longitude"]))
+        ponto = cursor.fetchone()
+
+        cursor.execute("SELECT perdas FROM perdas_uf WHERE uf = %s;", (cidade["uf"],))
+        linha_perdas = cursor.fetchone()
+        perdas = float(linha_perdas["perdas"]) if linha_perdas else PERDAS_PADRAO_UF_AUSENTE
+
+        cursor.close()
+        conn.close()
+
+        consumo_mensal = {m: float(dados["consumo"][m]) for m in MESES}
+        dimensionamento = calcular_dimensionamento(consumo_mensal, ponto, perdas, 0)
+
+        return jsonify({
+            "potencia_sugerida_kwp": dimensionamento["potencia_sugerida_kwp"],
+            "irradiancia_media_mensal_kwh_m2_dia": dimensionamento["irradiancia_media_mensal_kwh_m2_dia"]
+        }), 200
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+
 @app.route("/api/calcular", methods=["POST"])
 def calcular():
     try:
         dados = request.json
+        tarifa_kwh = float(dados.get("tarifa_kwh") or 0)
+        erro_tarifa = validar_tarifa(tarifa_kwh)
+        if erro_tarifa:
+            return jsonify({"erro": erro_tarifa}), 400
+
         conn = obter_conexao()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -166,10 +212,15 @@ def calcular():
             float(dados["valor_kit"]), float(dados.get("custos_extra", 0)),
             float(dados["lucro_percentual"]), float(dados.get("imposto_percentual", 0))
         )
+        economia = calcular_economia_e_payback(
+            dimensionamento['consumo_medio_mensal_kwh'], dimensionamento['geracao_media_mensal_kwh'],
+            tarifa_kwh, dados.get('classificacao_rede'), financeiro['valor_total']
+        )
 
         return jsonify({
             "dimensionamento": dimensionamento,
             "financeiro": financeiro,
+            "economia": economia,
             "perdas_usada": perdas
         }), 200
     except Exception as e:
@@ -338,8 +389,12 @@ def _recalcular_orcamento(cursor, linha):
         float(linha['valor_kit']), float(linha['custos_extra']),
         float(linha['lucro_percentual']), float(linha['imposto_percentual'])
     )
+    economia = calcular_economia_e_payback(
+        dimensionamento['consumo_medio_mensal_kwh'], dimensionamento['geracao_media_mensal_kwh'],
+        float(linha['tarifa_kwh']), linha.get('classificacao_rede'), financeiro['valor_total']
+    )
 
-    return dimensionamento, financeiro, modulo, inversor, perdas
+    return dimensionamento, financeiro, economia, modulo, inversor, perdas
 
 
 @app.route("/api/orcamentos", methods=["GET"])
@@ -402,6 +457,9 @@ def estatisticas_orcamentos():
 def criar_orcamento():
     try:
         d = request.json
+        erro_tarifa = validar_tarifa(float(d.get('tarifa_kwh') or 0))
+        if erro_tarifa:
+            return jsonify({"erro": erro_tarifa}), 400
         conn = obter_conexao()
         cursor = conn.cursor()
         colunas_consumo = ', '.join(f'consumo_{m}' for m in MESES)
@@ -455,7 +513,7 @@ def obter_orcamento(id_orcamento):
         conn.close()
         return jsonify({"erro": "Orçamento não encontrado"}), 404
 
-    dimensionamento, financeiro, modulo, inversor, perdas = _recalcular_orcamento(cursor, linha)
+    dimensionamento, financeiro, economia, modulo, inversor, perdas = _recalcular_orcamento(cursor, linha)
     cursor.close()
     conn.close()
 
@@ -466,6 +524,7 @@ def obter_orcamento(id_orcamento):
         'orcamento': linha_serializavel,
         'dimensionamento': dimensionamento,
         'financeiro': financeiro,
+        'economia': economia,
         'modulo': modulo,
         'inversor': inversor
     }), 200
@@ -475,6 +534,9 @@ def obter_orcamento(id_orcamento):
 def atualizar_orcamento(id_orcamento):
     try:
         d = request.json
+        erro_tarifa = validar_tarifa(float(d.get('tarifa_kwh') or 0))
+        if erro_tarifa:
+            return jsonify({"erro": erro_tarifa}), 400
         conn = obter_conexao()
         cursor = conn.cursor()
 
@@ -517,6 +579,11 @@ def atualizar_orcamento(id_orcamento):
             d.get('validade_dias', 7),
             id_orcamento
         ])
+        if cursor.rowcount == 0:
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            return jsonify({"erro": "Este orçamento já foi excluído e não pode ser salvo."}), 404
         conn.commit()
         cursor.close()
         conn.close()
@@ -559,7 +626,7 @@ def gerar_pdf_orcamento(id_orcamento):
         conn.close()
         return jsonify({"erro": "Orçamento não encontrado"}), 404
 
-    dimensionamento, financeiro, modulo, inversor, perdas = _recalcular_orcamento(cursor, linha)
+    dimensionamento, financeiro, economia, modulo, inversor, perdas = _recalcular_orcamento(cursor, linha)
     cursor.close()
     conn.close()
 
